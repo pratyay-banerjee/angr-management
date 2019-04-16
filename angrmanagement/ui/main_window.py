@@ -19,6 +19,7 @@ from ..config import IMG_LOCATION
 from .workspace import Workspace
 from .dialogs.load_binary import LoadBinary, LoadBinaryError
 from .dialogs.new_state import NewState
+from .dialogs.about import LoadAboutDialog
 from .toolbars import StatesToolbar, AnalysisToolbar, FileToolbar
 
 
@@ -129,20 +130,8 @@ class MainWindow(QMainWindow):
     def open_doc_link(self):
         QDesktopServices.openUrl(QUrl("https://docs.angr.io/", QUrl.TolerantMode))
 
-    def open_about_dialog(self, icon_location='angr.png'):
-        self.aboutDialog = QMessageBox()
-        self.aboutDialog.setIconPixmap(icon_location)
-        self.aboutDialog.setWindowTitle("about Angr")
-        self.aboutDialog.setText("about Angr")
-        #aboutDialog.setInformativeText(get_version())
-        #creditLabel = QLabel()
-        #creditLabel.setText("<a href=\"http://angr.io/\">Credits</a>")
-        #creditLabel.setTextFormat(Qt.RichText)
-        #creditLabel.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        #creditLabel.setOpenExternalLinks(True)
-        self.aboutDialog.show()
-        print("i'm here")
-        import pdb; pdb.set_trace()
+    def open_about_dialog(self):
+        LoadAboutDialog()
     #
     # Widgets
     #
