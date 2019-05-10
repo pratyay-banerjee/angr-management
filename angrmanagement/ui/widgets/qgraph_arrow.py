@@ -77,5 +77,4 @@ class QGraphArrow(QGraphicsItem):
                 if maxy is None or y > maxy:
                     maxy = y
             self.rect = QRectF(QPointF(minx-10, miny-10), QPointF(maxx+10, maxy+10))
-        else:
-            return self.rect
+        return self.rect

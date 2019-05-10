@@ -48,8 +48,8 @@ class QDisasmGraph(QBaseGraph):
 
         self._edges = None
 
-        #self.key_pressed.connect(self._on_keypressed_event)
-        #self.key_released.connect(self._on_keyreleased_event)
+        self.key_pressed.connect(self._on_keypressed_event)
+        self.key_released.connect(self._on_keyreleased_event)
         self.blocks = []
 
     #
@@ -132,12 +132,13 @@ class QDisasmGraph(QBaseGraph):
 
     #     btn = event.button()
     #     if btn == Qt.LeftButton:
-    #         block = self._get_block_by_pos(event.pos())
-    #         if block is not None:
-    #             # clicking on a block
-    #             block.on_mouse_pressed(event.button(), self._to_graph_pos(event.pos()))
-    #             event.accept()
-    #             return
+    #         pass
+    #         # block = self._get_block_by_pos(event.pos())
+    #         # if block is not None:
+    #         #     # clicking on a block
+    #         #     block.on_mouse_pressed(event.button(), self._to_graph_pos(event.pos()))
+    #         #     event.accept()
+    #         #     return
     #     elif btn == Qt.ForwardButton:
     #         # Jump forward
     #         self.disassembly_view.jump_forward()
@@ -179,67 +180,67 @@ class QDisasmGraph(QBaseGraph):
     #         event.accept()
     #         return True
 
-    # def _on_keypressed_event(self, key_event):
+    def _on_keypressed_event(self, key_event):
 
-    #     key = key_event.key()
+        key = key_event.key()
 
-    #     if key == Qt.Key_G:
-    #         # jump to window
-    #         self.disassembly_view.popup_jumpto_dialog()
-    #         return True
-    #     elif key == Qt.Key_N:
-    #         # rename a label
-    #         self.disassembly_view.popup_rename_label_dialog()
-    #         return True
-    #     elif key == Qt.Key_X:
-    #         # XRef
+        if key == Qt.Key_G:
+            # jump to window
+            self.disassembly_view.popup_jumpto_dialog()
+            return True
+        elif key == Qt.Key_N:
+            # rename a label
+            self.disassembly_view.popup_rename_label_dialog()
+            return True
+        elif key == Qt.Key_X:
+            # XRef
 
-    #         # get the variable
-    #         if self.selected_operands:
-    #             ins_addr, operand_idx = next(iter(self.selected_operands))
-    #             block = self._insn_addr_to_block.get(ins_addr, None)
-    #             if block is not None:
-    #                 operand = block.addr_to_insns[ins_addr].get_operand(operand_idx)
-    #                 if operand is not None and operand.variable is not None:
-    #                     self.disassembly_view.popup_xref_dialog(operand.variable)
-    #         return True
-    #     elif key == Qt.Key_Escape or (key == Qt.Key_Left and QApplication.keyboardModifiers() & Qt.ALT != 0):
-    #         # jump back
-    #         self.disassembly_view.jump_back()
-    #         return True
-    #     elif key == Qt.Key_Right and QApplication.keyboardModifiers() & Qt.ALT != 0:
-    #         # jump forward
-    #         self.disassembly_view.jump_forward()
-    #         return True
+            # get the variable
+            if self.selected_operands:
+                ins_addr, operand_idx = next(iter(self.selected_operands))
+                block = self._insn_addr_to_block.get(ins_addr, None)
+                if block is not None:
+                    operand = block.addr_to_insns[ins_addr].get_operand(operand_idx)
+                    if operand is not None and operand.variable is not None:
+                        self.disassembly_view.popup_xref_dialog(operand.variable)
+            return True
+        elif key == Qt.Key_Escape or (key == Qt.Key_Left and QApplication.keyboardModifiers() & Qt.ALT != 0):
+            # jump back
+            self.disassembly_view.jump_back()
+            return True
+        elif key == Qt.Key_Right and QApplication.keyboardModifiers() & Qt.ALT != 0:
+            # jump forward
+            self.disassembly_view.jump_forward()
+            return True
 
-    #     elif key == Qt.Key_A:
-    #         # switch between highlight mode
-    #         self.disassembly_view.toggle_smart_highlighting(not self.infodock.smart_highlighting)
-    #         return True
+        elif key == Qt.Key_A:
+            # switch between highlight mode
+            self.disassembly_view.toggle_smart_highlighting(not self.infodock.smart_highlighting)
+            return True
 
-    #     elif key == Qt.Key_Tab:
-    #         # decompile
-    #         self.disassembly_view.decompile_current_function()
-    #         return True
+        elif key == Qt.Key_Tab:
+            # decompile
+            self.disassembly_view.decompile_current_function()
+            return True
 
-    #     elif key == Qt.Key_Semicolon:
-    #         # add comment
-    #         self.disassembly_view.popup_comment_dialog()
-    #         return True
+        elif key == Qt.Key_Semicolon:
+            # add comment
+            self.disassembly_view.popup_comment_dialog()
+            return True
 
-    #     return False
+        return False
 
-    # def _on_keyreleased_event(self, key_event):
+    def _on_keyreleased_event(self, key_event):
 
-    #     key = key_event.key()
+        key = key_event.key()
 
-    #     if key == Qt.Key_Space:
-    #         # switch to linear view
-    #         self.disassembly_view.display_linear_viewer()
+        if key == Qt.Key_Space:
+            # switch to linear view
+            self.disassembly_view.display_linear_viewer()
 
-    #         return True
+            return True
 
-    #     return False
+        return False
 
     #
     # Layout
@@ -276,7 +277,7 @@ class QDisasmGraph(QBaseGraph):
 
         return nodes, gl.edges
 
-    def request_relayout(self, ensure_visible=True):
+    def request_relayout(self):
 
         node_coords, edges = self._layout_graph()
 

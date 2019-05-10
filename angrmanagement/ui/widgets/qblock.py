@@ -18,6 +18,10 @@ from .qphivariable import QPhiVariable
 from .qvariable import QVariable
 from .qgraph_object import QGraphObject
 
+import logging
+
+_l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
 class QBlock(QGraphicsItem):
     TOP_PADDING = 5
@@ -47,6 +51,8 @@ class QBlock(QGraphicsItem):
         self.objects = [ ]  # instructions and labels
         self.addr_to_insns = { }
         self.addr_to_labels = { }
+
+        self.setFlags(QGraphicsItem.ItemIsFocusable)
 
         self._init_widgets()
 
@@ -116,23 +122,56 @@ class QBlock(QGraphicsItem):
     # Event handlers
     #
 
-    def on_mouse_pressed(self, button, pos):
-        for obj in self.objects:
-            if obj.y <= pos.y() < obj.y + obj.height:
-                obj.on_mouse_pressed(button, pos)
-                break
+    def focusInEvent(self, event):
+        _l.debug('Block got focus!')
+        return super().focusInEvent(event)
 
-    def on_mouse_released(self, button, pos):
-        for obj in self.objects:
-            if obj.y <= pos.y() < obj.y + obj.height:
-                obj.on_mouse_released(button, pos)
-                break
+        #return super().mouseReleaseEvent(event)
 
-    def on_mouse_doubleclicked(self, button, pos):
-        for obj in self.objects:
-            if obj.y <= pos.y() < obj.y + obj.height:
-                obj.on_mouse_doubleclicked(button, pos)
-                break
+    def mousePressEvent(self, event):
+        button = event.button()
+        if button == Qt.LeftButton:
+            _l.debug('Detected press')
+            self._clicked = True
+
+    def mouseMoveEvent(self, event):
+        _l.debug('Detected move')
+        self._clicked = False
+
+    def mouseReleaseEvent(self, event):
+        button = event.button()
+        _l.debug('Detected release')
+        if self._clicked and button == Qt.LeftButton:
+            _l.debug('Block detected left click!')
+            event.accept()
+
+    # def mouseReleaseEvent(self, event):
+    #     button = event.button()
+    #     pos = event.pos()
+    #     if button == Qt.RightButton:
+    #         event.accept()
+    #         for obj in self.objects:
+    #             if obj.y <= pos.y() < obj.y + obj.height:
+    #                 obj.on_mouse_released(button, pos)
+    #     if button == Qt.LeftButton:
+    #         _l.debug('Block detected left click!')
+    #         for obj in self.objects:
+    #             if obj.y <= pos.y() < obj.y + obj.height:
+    #                 obj.on_mouse_pressed(button, pos)
+    #                 break
+    #     event.ignore()
+
+    # def mouseDoubleClickEvent(self, event):
+    #     button = event.button()
+    #     pos = event.pos()
+    #     if button == Qt.LeftButton:
+    #         for obj in self.objects:
+    #             if obj.y <= pos.y() < obj.y + obj.height:
+    #                 obj.on_mouse_doubleclicked(button, pos)
+    #                 event.accept()
+    #                 return True
+
+    #     return super().mouseReleaseEvent(event)
 
     #
     # Initialization
@@ -191,6 +230,9 @@ class QBlock(QGraphicsItem):
 
     def _paint_graph(self, painter, omit_text=False):
 
+        painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+
+        painter.setFont(Conf.code_font)
         # background of the node
         if omit_text:
             painter.setBrush(QColor(0xda, 0xda, 0xda))
@@ -233,4 +275,5 @@ class QBlock(QGraphicsItem):
     def boundingRect(self):
         if self.rect is None:
             self._update_size()
+        assert self.rect is not None
         return self.rect
