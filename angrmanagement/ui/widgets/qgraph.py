@@ -15,6 +15,7 @@ class QZoomingGraphicsView(QGraphicsView):
 
     def __init__(self, parent):
         super(QZoomingGraphicsView, self).__init__(parent)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
 
     def sizeHint(self):
         return QSize(300, 300)
@@ -23,6 +24,9 @@ class QZoomingGraphicsView(QGraphicsView):
         if event.modifiers() & Qt.ControlModifier == Qt.ControlModifier:
             zoomInFactor = 1.25
             zoomOutFactor = 1 / zoomInFactor
+
+            self.setTransformationAnchor(QGraphicsView.NoAnchor)
+            self.setResizeAnchor(QGraphicsView.NoAnchor)
 
             # Save the scene pos
             oldPos = self.mapToScene(event.pos())
@@ -43,36 +47,36 @@ class QZoomingGraphicsView(QGraphicsView):
         else:
             super(QZoomingGraphicsView, self).wheelEvent(event)
 
-    def event(self, event):
-        """
-        Reimplemented to capture the Tab keypress event.
-        """
+    # def event(self, event):
+    #     """
+    #     Reimplemented to capture the Tab keypress event.
+    #     """
 
-        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Tab:
-            self.key_pressed.emit(event)
-            return True
+    #     if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Tab:
+    #         self.key_pressed.emit(event)
+    #         return True
 
-        return super(QZoomingGraphicsView, self).event(event)
+    #     return super(QZoomingGraphicsView, self).event(event)
 
-    def keyPressEvent(self, event):
-        """
-        KeyPress event
+    # def keyPressEvent(self, event):
+    #     """
+    #     KeyPress event
 
-        :param PySide2.QtGui.QKeyEvent event: The event
-        :return: True/False
-        """
+    #     :param PySide2.QtGui.QKeyEvent event: The event
+    #     :return: True/False
+    #     """
 
-        self.key_pressed.emit(event)
+    #     self.key_pressed.emit(event)
 
-    def keyReleaseEvent(self, event):
-        """
-        KeyRelease event
+    # def keyReleaseEvent(self, event):
+    #     """
+    #     KeyRelease event
 
-        :param PySide2.QtGui.QKeyEvent event: The event
-        :return: True/False
-        """
+    #     :param PySide2.QtGui.QKeyEvent event: The event
+    #     :return: True/False
+    #     """
 
-        self.key_released.emit(event)
+    #     self.key_released.emit(event)
 
 
 class QBaseGraph(QZoomingGraphicsView):
@@ -82,7 +86,6 @@ class QBaseGraph(QZoomingGraphicsView):
 
         self.workspace = workspace
         self.scene = None
-        self._proxies = {}
         self._edge_paths = []
         self.blocks = set()
 
@@ -96,27 +99,6 @@ class QBaseGraph(QZoomingGraphicsView):
         self._scrolling_start = None
 
         self._init_widgets()
-
-    def add_child(self, child):
-        self._proxy(child)
-
-    def remove_child(self, child):
-        if child in self._proxies:
-            self.scene.removeItem(self._proxies[child])
-
-    def _proxy(self, child):
-        if child not in self._proxies:
-            child.setParent(None)
-            self._proxies[child] = self.scene.addWidget(child)
-            return self._proxies[child]
-
-        return self._proxies[child]
-
-    def remove_all_children(self):
-        for child in self._proxies:
-            self.scene.removeItem(self._proxies[child])
-            child.setParent(self)
-        self._proxies.clear()
 
     def request_relayout(self):
         raise NotImplementedError()
@@ -164,7 +146,7 @@ class QBaseGraph(QZoomingGraphicsView):
             block.addr_to_insns[insn_addr].select()
 
         # Notify subscribers BEFORE we update the viewport so they can make any further changes
-        self.selected_insns.am_event(graph=self, addr=insn_addr, block=block)
+        #self.selected_insns.am_event(graph=self, addr=insn_addr, block=block)
         self.viewport().update()
 
     def unselect_instruction(self, insn_addr):
@@ -229,56 +211,57 @@ class QBaseGraph(QZoomingGraphicsView):
     # Event handlers
     #
 
-    def mousePressEvent(self, event):
-        if self._allow_dragging and event.button() == Qt.LeftButton:
-            # dragging the entire graph
-            self.setDragMode(QGraphicsView.ScrollHandDrag)
-            self._is_scrolling = True
-            self._scrolling_start = (event.x(), event.y())
-            self.viewport().grabMouse()
-            event.accept()
+    #def mousePressEvent(self, event):
+    #    if self._allow_dragging and event.button() == Qt.LeftButton:
+    #        # dragging the entire graph
+    #        self.setDragMode(QGraphicsView.ScrollHandDrag)
+    #        #self._is_scrolling = True
+    #        #self._scrolling_start = (event.x(), event.y())
+    #        self.viewport().grabMouse()
+    #        event.accept()
 
-    def mouseMoveEvent(self, event):
-        """
+    # def mouseMoveEvent(self, event):
+    #     """
 
-        :param QMouseEvent event:
-        :return:
-        """
+    #     :param QMouseEvent event:
+    #     :return:
+    #     """
 
-        if self._is_scrolling:
-            pos = event.pos()
-            delta = (pos.x() - self._scrolling_start[0], pos.y() - self._scrolling_start[1])
-            self._scrolling_start = (pos.x(), pos.y())
+    #     if self._is_scrolling:
+    #         pos = event.pos()
+    #         delta = (pos.x() - self._scrolling_start[0], pos.y() - self._scrolling_start[1])
+    #         self._scrolling_start = (pos.x(), pos.y())
 
-            # move the graph
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta[0])
-            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta[1])
-            event.accept()
+    #         # move the graph
+    #         self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta[0])
+    #         self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta[1])
+    #         event.accept()
 
-    def mouseReleaseEvent(self, event):
-        """
+    # def mouseReleaseEvent(self, event):
+    #     """
 
-        :param QMouseEvent event:
-        :return:
-        """
+    #     :param QMouseEvent event:
+    #     :return:
+    #     """
 
-        if event.button() == Qt.LeftButton and self._is_scrolling:
-            self._is_scrolling = False
-            self.setDragMode(QGraphicsView.NoDrag)
-            self.viewport().releaseMouse()
-            event.accept()
+    #     if event.button() == Qt.LeftButton and self._is_scrolling:
+    #         self._is_scrolling = False
+    #         self.setDragMode(QGraphicsView.NoDrag)
+    #         self.viewport().releaseMouse()
+    #         event.accept()
 
     #
     # Private methods
     #
 
+    def _reset_scene(self):
+        self.scene = QGraphicsScene()
+
     def _init_widgets(self):
-        self.scene = QGraphicsScene(self.parent())
-        self.setScene(self.scene)
         # self.setDragMode(QGraphicsView.ScrollHandDrag)
-        self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform |
-                            QPainter.HighQualityAntialiasing
-                            )
+        #self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform |
+                            #QPainter.HighQualityAntialiasing
+                            #)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.horizontalScrollBar().setSingleStep(16)

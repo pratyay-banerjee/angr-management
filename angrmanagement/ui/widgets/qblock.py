@@ -1,6 +1,7 @@
 
 from PySide2.QtGui import QPainter, QLinearGradient, QColor, QBrush, QPen
-from PySide2.QtCore import QPointF, Qt
+from PySide2.QtCore import QPointF, Qt, QRectF
+from PySide2.QtWidgets import QGraphicsItem
 
 from angr.analyses.disassembly import Instruction
 from angr.sim_variable import SimRegisterVariable
@@ -18,7 +19,7 @@ from .qvariable import QVariable
 from .qgraph_object import QGraphObject
 
 
-class QBlock(QGraphObject):
+class QBlock(QGraphicsItem):
     TOP_PADDING = 5
     BOTTOM_PADDING = 5
     GRAPH_LEFT_PADDING = 10
@@ -96,17 +97,20 @@ class QBlock(QGraphObject):
     def size(self):
         return self.width, self.height
 
-    def paint(self, painter):
+    def paint(self, painter, option, widget):
         """
 
         :param QPainter painter:
         :return:
         """
+        lod = option.levelOfDetailFromTransform(painter.worldTransform())
+        omit_text = lod < 0.3
 
         if self.mode == 'linear':
+
             self._paint_linear(painter)
         else:
-            self._paint_graph(painter)
+            self._paint_graph(painter, omit_text)
 
     #
     # Event handlers
@@ -183,22 +187,31 @@ class QBlock(QGraphObject):
         if self.mode == "graph":
             self._width += self.GRAPH_LEFT_PADDING
 
-    def _paint_graph(self, painter):
+        self.rect = QRectF(0, 0, self._width+10, self._height+10)
+
+    def _paint_graph(self, painter, omit_text=False):
 
         # background of the node
-        painter.setBrush(QColor(0xfa, 0xfa, 0xfa))
+        if omit_text:
+            painter.setBrush(QColor(0xda, 0xda, 0xda))
+        else:
+            painter.setBrush(QColor(0xfa, 0xfa, 0xfa))
         painter.setPen(QPen(QColor(0xf0, 0xf0, 0xf0), 1.5))
-        painter.drawRect(self.x, self.y, self.width, self.height)
+        painter.drawRect(0, 0, self.width, self.height)
 
         # content
+
+
+        if omit_text:
+            return
 
         y_offset = self.TOP_PADDING
 
         for obj in self.objects:
             y_offset += self.SPACING
 
-            obj.x = self.x + self.GRAPH_LEFT_PADDING
-            obj.y = self.y + y_offset
+            obj.x = self.GRAPH_LEFT_PADDING
+            obj.y = y_offset
             obj.paint(painter)
 
             y_offset += obj.height
@@ -212,8 +225,12 @@ class QBlock(QGraphObject):
         for obj in self.objects:
             y_offset += self.SPACING
 
-            obj.x = self.x
-            obj.y = self.y + y_offset
+            obj.y = y_offset
             obj.paint(painter)
 
             y_offset += obj.height
+
+    def boundingRect(self):
+        if self.rect is None:
+            self._update_size()
+        return self.rect
