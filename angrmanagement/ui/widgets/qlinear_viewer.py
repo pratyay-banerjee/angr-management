@@ -1,31 +1,28 @@
 import logging
 
-from PySide2.QtWidgets import QWidget, QHBoxLayout, QAbstractSlider
+from PySide2.QtWidgets import QWidget, QHBoxLayout, QAbstractSlider, QGraphicsView, QGraphicsScene, QGraphicsItem
 from PySide2.QtGui import QPainter, QWheelEvent
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, QPointF
 from sortedcontainers import SortedDict
 
 from angr.block import Block
 from angr.analyses.cfg.cfb import Unknown, MemoryRegion
 
 from ...config import Conf
-from .qgraph import QBaseGraph
-from .qblock import QBlock
+from .qblock import QLinearBlock
 from .qunknown_block import QUnknownBlock
 
-_l = logging.getLogger('ui.widgets.qlinear_viewer')
-# _l.setLevel(logging.DEBUG)
+_l = logging.getLogger(__name__)
 
 
-class QLinearGraphicsView(QBaseGraph):
+class QLinearGraphicsView(QGraphicsView):
+
     def __init__(self, viewer, disasm_view, parent=None):
-        super(QLinearGraphicsView, self).__init__(viewer.workspace, parent=parent, allow_dragging=False)
+        super(QLinearGraphicsView, self).__init__(parent=parent)
 
         self.viewer = viewer  # type:QLinearViewer
         self.disasm_view = disasm_view
         self._line_height = Conf.disasm_font_height
-
-        self.key_released.connect(self._on_keyreleased_event)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -34,30 +31,29 @@ class QLinearGraphicsView(QBaseGraph):
 
         self.verticalScrollBar().actionTriggered.connect(self._on_vertical_scroll_bar_triggered)
 
+        self.setScene(QGraphicsScene())
+        self._paint_objects()
+
     #
     # Events
     #
 
-    def _on_keyreleased_event(self, key_event):
-
-        key = key_event.key()
-        if key == Qt.Key_Space:
-            self.disasm_view.display_disasm_graph()
-            return True
-        elif key == Qt.Key_Down:
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key_Down:
             self._on_vertical_scroll_bar_triggered(QAbstractSlider.SliderSingleStepAdd)
-            return True
+            return
         elif key == Qt.Key_Up:
             self._on_vertical_scroll_bar_triggered(QAbstractSlider.SliderSingleStepSub)
-            return True
+            return
         elif key == Qt.Key_PageDown:
             self._on_vertical_scroll_bar_triggered(QAbstractSlider.SliderPageStepAdd)
-            return True
+            return
         elif key == Qt.Key_PageUp:
             self._on_vertical_scroll_bar_triggered(QAbstractSlider.SliderPageStepSub)
-            return True
+            return
 
-        return False
+        super().keyPressEvent(event)
 
     def _on_vertical_scroll_bar_triggered(self, action):
 
@@ -87,52 +83,52 @@ class QLinearGraphicsView(QBaseGraph):
             self.viewer.prepare_objects(new_offset)
             self.viewport().update()
 
-    def mousePressEvent(self, event):
-        """
+    # def mousePressEvent(self, event):
+    #     """
 
-        :param QMouseEvent event:
-        :return:
-        """
+    #     :param QMouseEvent event:
+    #     :return:
+    #     """
 
-        if event.button() == Qt.LeftButton:
-            block = self._get_object_by_pos(event.pos())
-            if block is not None:
-                # clicking on a block
-                block.on_mouse_pressed(event.button(), event.pos())
-                event.accept()
-                return
+    #     if event.button() == Qt.LeftButton:
+    #         block = self._get_object_by_pos(event.pos())
+    #         if block is not None:
+    #             # clicking on a block
+    #             block.on_mouse_pressed(event.button(), event.pos())
+    #             event.accept()
+    #             return
 
-        super(QLinearGraphicsView, self).mousePressEvent(event)
+    #     super(QLinearGraphicsView, self).mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        """
+    # def mouseReleaseEvent(self, event):
+    #     """
 
-        :param QMouseEvent event:
-        :return:
-        """
+    #     :param QMouseEvent event:
+    #     :return:
+    #     """
 
-        if event.button() == Qt.RightButton:
-            block = self._get_object_by_pos(event.pos())
-            if block is not None:
-                block.on_mouse_released(event.button(), event.pos())
-            event.accept()
-            return
+    #     if event.button() == Qt.RightButton:
+    #         block = self._get_object_by_pos(event.pos())
+    #         if block is not None:
+    #             block.on_mouse_released(event.button(), event.pos())
+    #         event.accept()
+    #         return
 
-        super(QLinearGraphicsView, self).mouseReleaseEvent(event)
+    #     super(QLinearGraphicsView, self).mouseReleaseEvent(event)
 
-    def mouseDoubleClickEvent(self, event):
-        """
+    # def mouseDoubleClickEvent(self, event):
+    #     """
 
-        :param QMouseEvent event:
-        :return:
-        """
+    #     :param QMouseEvent event:
+    #     :return:
+    #     """
 
-        if event.button() == Qt.LeftButton:
-            block = self._get_object_by_pos(event.pos())
-            if block is not None:
-                block.on_mouse_doubleclicked(event.button(), event.pos())
-            event.accept()
-            return True
+    #     if event.button() == Qt.LeftButton:
+    #         block = self._get_object_by_pos(event.pos())
+    #         if block is not None:
+    #             block.on_mouse_doubleclicked(event.button(), event.pos())
+    #         event.accept()
+    #         return True
 
     def wheelEvent(self, event):
         """
@@ -153,24 +149,12 @@ class QLinearGraphicsView(QBaseGraph):
 
         self._update_size()
 
-    def paintEvent(self, event):
-        """
-        Paint the linear view.
-
-        :param event:
-        :return:
-        """
-
-        painter = QPainter(self.viewport())
-
-        # Set the disassembly font
-        painter.setFont(Conf.disasm_font)
-
-        self._paint_objects(painter)
-
     #
     # Public methods
     #
+
+    def _update_size(self):
+        pass
 
     def refresh(self):
 
@@ -194,15 +178,17 @@ class QLinearGraphicsView(QBaseGraph):
     # Private methods
     #
 
-    def _paint_objects(self, painter):
+    def _paint_objects(self):
 
         x = 80
         y = int(-self.viewer.start_line_in_object * self.line_height())
 
+        breakpoint()
         for obj in self.viewer.objects:
-            obj.x = x
-            obj.y = y
-            obj.paint(painter)
+            if not isinstance(obj, QGraphicsItem):
+                continue
+            self.scene().addItem(obj)
+            obj.setPos(QPointF(x, y))
 
             y += obj.height
 
@@ -213,15 +199,15 @@ class QLinearGraphicsView(QBaseGraph):
 
         self._update_size()
 
-    def _get_object_by_pos(self, pos):
-        x, y = pos.x(), pos.y()
-        for obj in self.viewer.objects:
-            if obj.x is None or obj.y is None:
-                continue
-            if obj.x <= x <= obj.x + obj.width and \
-                    obj.y <= y <= obj.y + obj.height:
-                return obj
-        return None
+    # def _get_object_by_pos(self, pos):
+    #     x, y = pos.x(), pos.y()
+    #     for obj in self.viewer.objects:
+    #         if obj.x is None or obj.y is None:
+    #             continue
+    #         if obj.x <= x <= obj.x + obj.width and \
+    #                 obj.y <= y <= obj.y + obj.height:
+    #             return obj
+    #     return None
 
 
 class QLinearViewer(QWidget):
@@ -396,10 +382,6 @@ class QLinearViewer(QWidget):
                 # Conversion failed
                 continue
 
-            if isinstance(qobject, QBlock):
-                for insn_addr in qobject.addr_to_insns.keys():
-                    self._linear_view._add_insn_addr_block_mapping(insn_addr, qobject)
-
             object_lines = int(qobject.height // self._linear_view.line_height())
 
             if start_line >= object_lines:
@@ -446,15 +428,15 @@ class QLinearViewer(QWidget):
         self.setLayout(layout)
 
         # Setup proxy methods
-        self.update_label = self._linear_view.update_label
-        self.select_instruction = self._linear_view.select_instruction
-        self.unselect_instruction = self._linear_view.unselect_instruction
-        self.unselect_all_instructions = self._linear_view.unselect_all_instructions
-        self.select_operand = self._linear_view.select_operand
-        self.unselect_operand = self._linear_view.unselect_operand
-        self.unselect_all_operands = self._linear_view.unselect_all_operands
-        self.show_selected = self._linear_view.show_selected
-        self.show_instruction = self._linear_view.show_instruction
+        # self.update_label = self._linear_view.update_label
+        # self.select_instruction = self._linear_view.select_instruction
+        # self.unselect_instruction = self._linear_view.unselect_instruction
+        # self.unselect_all_instructions = self._linear_view.unselect_all_instructions
+        # self.select_operand = self._linear_view.select_operand
+        # self.unselect_operand = self._linear_view.unselect_operand
+        # self.unselect_all_operands = self._linear_view.unselect_all_operands
+        # self.show_selected = self._linear_view.show_selected
+        # self.show_instruction = self._linear_view.show_instruction
 
     def _obj_to_paintable(self, obj_addr, obj):
         if isinstance(obj, Block):
@@ -463,7 +445,7 @@ class QLinearViewer(QWidget):
                 func_addr = cfg_node.function_address
                 func = self.cfg.kb.functions[func_addr]  # FIXME: Resiliency
                 disasm = self._get_disasm(func)
-                qobject = QBlock(self.workspace, func_addr, self.disasm_view, disasm,
+                qobject = QLinearBlock(self.workspace, func_addr, self.disasm_view, disasm,
                                  self.disasm_view.infodock, obj.addr, [obj], {}, mode='linear',
                                  )
             else:

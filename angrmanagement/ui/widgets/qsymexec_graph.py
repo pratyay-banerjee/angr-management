@@ -25,7 +25,6 @@ class QSymExecGraph(QBaseGraph):
         self._graph = None
         self._edges = []
 
-        self.key_pressed.connect(self._on_keypressed_event)
         self.state.am_subscribe(self._watch_state)
 
     def _init_widgets(self):
@@ -153,20 +152,20 @@ class QSymExecGraph(QBaseGraph):
 
         super(QSymExecGraph, self).mouseDoubleClickEvent(event)
 
-    def _on_keypressed_event(self, key_event):
+    def keyPressEvent(self, event):
         """
 
         :param QKeyEvent event:
         :return:
         """
 
-        key = key_event.key()
+        key = event.key()
 
         if key == Qt.Key_Tab:
             self._symexec_view.switch_to_disassembly_view()
-            return True
+            return
 
-        return False
+        super().keyPressEvent(event)
 
     def paintEvent(self, event):
         """

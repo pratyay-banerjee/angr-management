@@ -1,7 +1,7 @@
 from functools import wraps
 import logging
 
-from PySide2.QtCore import QPointF, QRectF, Qt, QPoint, QSize
+from PySide2.QtCore import QPointF, QRectF, Qt, QPoint, QSize, QMarginsF
 from PySide2.QtGui import QPainter, QBrush, QColor, QMouseEvent, QResizeEvent, QPen, QImage
 from PySide2.QtWidgets import QApplication
 
@@ -10,7 +10,7 @@ from ...utils import get_out_branches
 from ...utils.graph_layouter import GraphLayouter
 from ...utils.cfg import categorize_edges
 from ...utils.edge import EdgeSort
-from .qblock import QBlock
+from .qblock import QGraphBlock
 from .qgraph_arrow import QGraphArrow
 from .qgraph import QBaseGraph
 
@@ -32,11 +32,6 @@ def timeit(f):
 
 class QDisasmGraph(QBaseGraph):
 
-    XSPACE = 40
-    YSPACE = 40
-    LEFT_PADDING = 1000
-    TOP_PADDING = 1000
-
     def __init__(self, workspace, parent=None):
         super(QDisasmGraph, self).__init__(workspace, parent=parent)
 
@@ -48,8 +43,6 @@ class QDisasmGraph(QBaseGraph):
 
         self._edges = None
 
-        self.key_pressed.connect(self._on_keypressed_event)
-        self.key_released.connect(self._on_keyreleased_event)
         self.blocks = []
 
     #
@@ -97,7 +90,7 @@ class QDisasmGraph(QBaseGraph):
 
         supergraph = self._function_graph.supergraph
         for n in supergraph.nodes():
-            block = QBlock(self.workspace, self._function_graph.function.addr, self.disassembly_view, self.disasm,
+            block = QGraphBlock(self.workspace, self._function_graph.function.addr, self.disassembly_view, self.disasm,
                            self.infodock, n.addr, n.cfg_nodes, get_out_branches(n)
                            )
             self.scene.addItem(block)
@@ -108,90 +101,55 @@ class QDisasmGraph(QBaseGraph):
 
         self.request_relayout()
         self.setScene(self.scene)
+
+        # determine initial view focus point
+        entry_block = self._insn_addr_to_block[self._function_graph.function.addr]
+        entry_block_rect = entry_block.mapRectToScene(entry_block.boundingRect())
+        viewport_height = self.viewport().rect().height()
+        min_rect = self.scene.itemsBoundingRect()
+        if min_rect.height() < (viewport_height // 1.5):
+            self.centerOn(min_rect.center())
+        else:
+            focus_point = (entry_block_rect.center().x(), entry_block_rect.top() + (viewport_height // 4))
+            self.centerOn(*focus_point)
+
+        # show the graph
         self.show()
 
     def refresh(self):
-        pass
+        if not self.blocks:
+            return
 
-    def save_image_to(self, path):
-        pass
+        for b in self.blocks:
+            b.refresh()
 
-    def remove_block(self, block):
-        pass
+        self.request_relayout()
 
     #
     # Event handlers
     #
 
-    # def mousePressEvent(self, event):
-    #     """
+    def mousePressEvent(self, event):
+        btn = event.button()
+        if btn == Qt.ForwardButton:
+            self.disassembly_view.jump_forward()
+        elif btn == Qt.BackButton:
+            self.disassembly_view.jump_back()
+        else:
+            super().mousePressEvent(event)
 
-    #     :param QMouseEvent event:
-    #     :return:
-    #     """
+    def keyPressEvent(self, event):
 
-    #     btn = event.button()
-    #     if btn == Qt.LeftButton:
-    #         pass
-    #         # block = self._get_block_by_pos(event.pos())
-    #         # if block is not None:
-    #         #     # clicking on a block
-    #         #     block.on_mouse_pressed(event.button(), self._to_graph_pos(event.pos()))
-    #         #     event.accept()
-    #         #     return
-    #     elif btn == Qt.ForwardButton:
-    #         # Jump forward
-    #         self.disassembly_view.jump_forward()
-    #         return
-    #     elif btn == Qt.BackButton:
-    #         # Jump backward
-    #         self.disassembly_view.jump_back()
-    #         return
-
-    #     super(QDisasmGraph, self).mousePressEvent(event)
-
-    # def mouseReleaseEvent(self, event):
-    #     """
-
-    #     :param QMouseEvent event:
-    #     :return:
-    #     """
-
-    #     if event.button() == Qt.RightButton:
-    #         block = self._get_block_by_pos(event.pos())
-    #         if block is not None:
-    #             block.on_mouse_released(event.button(), self._to_graph_pos(event.pos()))
-    #         event.accept()
-    #         return
-
-    #     super(QDisasmGraph, self).mouseReleaseEvent(event)
-
-    # def mouseDoubleClickEvent(self, event):
-    #     """
-
-    #     :param QMouseEvent event:
-    #     :return:
-    #     """
-
-    #     if event.button() == Qt.LeftButton:
-    #         block = self._get_block_by_pos(event.pos())
-    #         if block is not None:
-    #             block.on_mouse_doubleclicked(event.button(), self._to_graph_pos(event.pos()))
-    #         event.accept()
-    #         return True
-
-    def _on_keypressed_event(self, key_event):
-
-        key = key_event.key()
+        key = event.key()
 
         if key == Qt.Key_G:
             # jump to window
             self.disassembly_view.popup_jumpto_dialog()
-            return True
+            return
         elif key == Qt.Key_N:
             # rename a label
             self.disassembly_view.popup_rename_label_dialog()
-            return True
+            return
         elif key == Qt.Key_X:
             # XRef
 
@@ -203,44 +161,33 @@ class QDisasmGraph(QBaseGraph):
                     operand = block.addr_to_insns[ins_addr].get_operand(operand_idx)
                     if operand is not None and operand.variable is not None:
                         self.disassembly_view.popup_xref_dialog(operand.variable)
-            return True
+            return
         elif key == Qt.Key_Escape or (key == Qt.Key_Left and QApplication.keyboardModifiers() & Qt.ALT != 0):
             # jump back
             self.disassembly_view.jump_back()
-            return True
+            return
         elif key == Qt.Key_Right and QApplication.keyboardModifiers() & Qt.ALT != 0:
             # jump forward
             self.disassembly_view.jump_forward()
-            return True
+            return
 
         elif key == Qt.Key_A:
             # switch between highlight mode
             self.disassembly_view.toggle_smart_highlighting(not self.infodock.smart_highlighting)
-            return True
+            return
 
         elif key == Qt.Key_Tab:
             # decompile
             self.disassembly_view.decompile_current_function()
-            return True
+            return
 
         elif key == Qt.Key_Semicolon:
             # add comment
             self.disassembly_view.popup_comment_dialog()
-            return True
+            return
 
-        return False
+        super().keyPressEvent(event)
 
-    def _on_keyreleased_event(self, key_event):
-
-        key = key_event.key()
-
-        if key == Qt.Key_Space:
-            # switch to linear view
-            self.disassembly_view.display_linear_viewer()
-
-            return True
-
-        return False
 
     #
     # Layout
@@ -301,22 +248,6 @@ class QDisasmGraph(QBaseGraph):
             arrow = QGraphArrow(edge)
             self.scene.addItem(arrow)
             arrow.setPos(QPointF(*edge.coordinates[0]))
-
-        # scrollbars
-        #self.horizontalScrollBar().setRange(min_x, max_x)
-        #self.verticalScrollBar().setRange(min_y, max_y)
-
-        #self.setSceneRect(QRectF(min_x, min_y, width, height))
-
-        #self.viewport().update()
-
-        #self._update_size()
-
-        # if ensure_visible:
-        #     if self.selected_insns:
-        #         self.show_selected()
-        #     else:
-        #         self.show_instruction(self._function_graph.function.addr, centering=True, use_block_pos=True)
 
     def show_instruction(self, insn_addr, centering=False, use_block_pos=False):
         pass

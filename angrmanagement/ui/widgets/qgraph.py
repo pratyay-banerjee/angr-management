@@ -1,8 +1,8 @@
 import logging
 
-from PySide2.QtWidgets import QGraphicsScene, QGraphicsView
-from PySide2.QtGui import QPainter, QKeyEvent
-from PySide2.QtCore import Qt, QSize, Signal, QPoint, QEvent
+from PySide2.QtWidgets import QGraphicsScene, QGraphicsView, QStyleOptionGraphicsItem
+from PySide2.QtGui import QPainter, QKeyEvent, QMouseEvent, QImage
+from PySide2.QtCore import Qt, QSize, Signal, QPoint, QEvent, QRectF, QMarginsF
 
 from ...data.instance import ObjectContainer
 
@@ -10,23 +10,61 @@ _l = logging.getLogger(__name__)
 _l.setLevel(logging.DEBUG)
 
 class QZoomingGraphicsView(QGraphicsView):
-    key_pressed = Signal(QKeyEvent)
-    key_released = Signal(QKeyEvent)
 
     def __init__(self, parent):
         super(QZoomingGraphicsView, self).__init__(parent)
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
+
+        self._is_dragging = False
+        self._is_mouse_pressed = False
+
+        self._mouse_press_event = None
+        self._last_coords = (0.0, 0.0)#None
+
+        self.setTransformationAnchor(QGraphicsView.NoAnchor)
+        self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+
+        # scroll bars are useless when the scene is near-infinite
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.setRenderHints(
+                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+
+    def _reset_scene(self):
+        width = 1000000 # a ludicrously large number, to emulate infinite panning
+        self.scene = QGraphicsScene(- (width / 2), - (width / 2), width, width)
 
     def sizeHint(self):
         return QSize(300, 300)
 
+    def save_image_to(self, path, top_margin=50, bottom_margin=50, left_margin=50, right_margin=50):
+
+        margins = QMarginsF(left_margin, top_margin, right_margin, bottom_margin)
+
+        oldRect = self.scene.sceneRect()
+        minRect = self.scene.itemsBoundingRect()
+        imgRect = minRect.marginsAdded(margins)
+
+
+        image = QImage(imgRect.size().toSize(), QImage.Format_ARGB32)
+        image.fill(Qt.white)
+        painter = QPainter(image)
+
+        painter.setRenderHints(
+                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+
+        self.scene.setSceneRect(imgRect)
+        self.scene.render(painter)
+        image.save(path)
+        painter.end()
+        self.scene.setSceneRect(oldRect)
+
+
     def wheelEvent(self, event):
         if event.modifiers() & Qt.ControlModifier == Qt.ControlModifier:
+            lod = QStyleOptionGraphicsItem.levelOfDetailFromTransform(self.transform())
             zoomInFactor = 1.25
             zoomOutFactor = 1 / zoomInFactor
-
-            self.setTransformationAnchor(QGraphicsView.NoAnchor)
-            self.setResizeAnchor(QGraphicsView.NoAnchor)
 
             # Save the scene pos
             oldPos = self.mapToScene(event.pos())
@@ -36,6 +74,9 @@ class QZoomingGraphicsView(QGraphicsView):
                 zoomFactor = zoomInFactor
             else:
                 zoomFactor = zoomOutFactor
+                # limit the scroll out limit for usability
+                if lod < 0.015:
+                    return
             self.scale(zoomFactor, zoomFactor)
 
             # Get the new position
@@ -58,25 +99,61 @@ class QZoomingGraphicsView(QGraphicsView):
 
         return super(QZoomingGraphicsView, self).event(event)
 
-    def keyPressEvent(self, event):
+    def _save_mouse_press_event(self, event):
+        self._mouse_press_event = QMouseEvent(event.type(),
+                                              event.pos(),
+                                              event.globalPos(),
+                                              event.button(),
+                                              event.buttons(),
+                                              event.modifiers())
+
+    def _save_last_coords(self, event):
+        pos = self.mapToScene(event.pos())
+        self._last_coords = (pos.x(), pos.y())
+
+    def mousePressEvent(self, event):
+        if self._allow_dragging and event.button() == Qt.LeftButton:
+
+            self._is_mouse_pressed = True
+            self._is_dragging = False
+
+            self._save_mouse_press_event(event)
+            self._save_last_coords(event)
+
+    def mouseMoveEvent(self, event):
         """
-        KeyPress event
 
-        :param PySide2.QtGui.QKeyEvent event: The event
-        :return: True/False
+        :param QMouseEvent event:
+        :return:
         """
 
-        self.key_pressed.emit(event)
+        if self._is_mouse_pressed:
+            self._is_dragging = True
+            pos = self.mapToScene(event.pos())
 
-    def keyReleaseEvent(self, event):
+            self.viewport().setCursor(Qt.ClosedHandCursor)
+
+            delta = (pos.x() - self._last_coords[0], pos.y() - self._last_coords[1])
+            self.translate(*delta)
+            self._save_last_coords(event)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
         """
-        KeyRelease event
 
-        :param PySide2.QtGui.QKeyEvent event: The event
-        :return: True/False
+        :param QMouseEvent event:
+        :return:
         """
 
-        self.key_released.emit(event)
+        if event.button() == Qt.LeftButton:
+            if self._is_dragging:
+                self.viewport().setCursor(Qt.ArrowCursor)
+                event.accept()
+            else:
+                super().mousePressEvent(self._mouse_press_event)
+                super().mouseReleaseEvent(event)
+            self._is_mouse_pressed = False
+            self._is_dragging = False
 
 
 class QBaseGraph(QZoomingGraphicsView):
@@ -93,12 +170,6 @@ class QBaseGraph(QZoomingGraphicsView):
         self.selected_operands = set()
         self._insn_addr_to_block = {}
         self._allow_dragging = allow_dragging
-
-        # scrolling
-        self._is_scrolling = False
-        self._scrolling_start = None
-
-        self._init_widgets()
 
     def request_relayout(self):
         raise NotImplementedError()
@@ -211,63 +282,10 @@ class QBaseGraph(QZoomingGraphicsView):
     # Event handlers
     #
 
-    # def mousePressEvent(self, event):
-    #     if self._allow_dragging and event.button() == Qt.LeftButton:
-    #         _l.debug('Got the mouse press in the base graph')
-    #         # dragging the entire graph
-    #         self.setDragMode(QGraphicsView.ScrollHandDrag)
-    #         self._is_scrolling = True
-    #         self._scrolling_start = (event.x(), event.y())
-    #         self.viewport().grabMouse()
-    #         event.accept()
-
-    # def mouseMoveEvent(self, event):
-    #     """
-
-    #     :param QMouseEvent event:
-    #     :return:
-    #     """
-
-    #     self._as_scrolling = True
-    #     # if self._is_scrolling:
-    #     #     pos = event.pos()
-    #     #     delta = (pos.x() - self._scrolling_start[0], pos.y() - self._scrolling_start[1])
-    #     #     self._scrolling_start = (pos.x(), pos.y())
-
-    #     #     # move the graph
-    #     #     self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta[0])
-    #     #     self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta[1])
-    #     #     event.accept()
-
-    # def mouseReleaseEvent(self, event):
-    #     """
-
-    #     :param QMouseEvent event:
-    #     :return:
-    #     """
-
-    #     if event.button() == Qt.LeftButton and self._is_scrolling:
-    #         self._is_scrolling = False
-    #         self.setDragMode(QGraphicsView.NoDrag)
-    #         self.viewport().releaseMouse()
-    #         event.accept()
-
     #
     # Private methods
     #
 
-    def _reset_scene(self):
-        self.scene = QGraphicsScene()
-
-    def _init_widgets(self):
-        self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform |
-                            QPainter.HighQualityAntialiasing
-                            )
-
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.horizontalScrollBar().setSingleStep(16)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.verticalScrollBar().setSingleStep(16)
 
     def _set_pos(self, widget, coord):
         """
@@ -282,22 +300,6 @@ class QBaseGraph(QZoomingGraphicsView):
         widget.resetTransform()
         trans = widget.transform()
         widget.setTransform(trans.translate(coord.x(), coord.y()))
-
-    def _update_size(self):
-
-        # update scrollbars
-        self.horizontalScrollBar().setPageStep(self.width())
-        self.verticalScrollBar().setPageStep(self.height())
-
-    def _to_graph_pos(self, pos):
-        x_offset = self.width() // 2 - self.horizontalScrollBar().value()
-        y_offset = self.height() // 2 - self.verticalScrollBar().value()
-        return QPoint(pos.x() - x_offset, pos.y() - y_offset)
-
-    def _from_graph_pos(self, pos):
-        x_offset = self.width() // 2 - self.horizontalScrollBar().value()
-        y_offset = self.height() // 2 - self.verticalScrollBar().value()
-        return QPoint(pos.x() + x_offset, pos.y() + y_offset)
 
     def _clear_insn_addr_block_mapping(self):
         self._insn_addr_to_block.clear()

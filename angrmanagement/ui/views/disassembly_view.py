@@ -210,6 +210,14 @@ class DisassemblyView(BaseView):
         self._linear_viewer.selected_insns.am_subscribe(callback)
         self._flow_graph.selected_insns.am_subscribe(callback)
 
+    def toggle_disasm_view(self):
+        if self._flow_graph.isHidden():
+            self._linear_viewer.hide()
+            self._flow_graph.show()
+        else:
+            self._linear_viewer.show()
+            self._flow_graph.hide()
+
     def display_disasm_graph(self):
 
         self._linear_viewer.hide()
@@ -395,8 +403,6 @@ class DisassemblyView(BaseView):
     #
 
     def _init_widgets(self):
-        pass
-
         self._linear_viewer = QLinearViewer(self.workspace, self)
         self._flow_graph = QDisasmGraph(self.workspace, self)
 
@@ -412,6 +418,18 @@ class DisassemblyView(BaseView):
 
         self.display_disasm_graph()
         # self.display_linear_viewer()
+
+    def keyReleaseEvent(self, event):
+        key = event.key()
+
+        if key == Qt.Key_Space:
+            # switch to linear view
+            self.toggle_disasm_view()
+            #self.disassembly_view.display_linear_viewer()
+            event.accept()
+            return
+
+        super().keyReleaseEvent(event)
 
     def _init_menus(self):
 

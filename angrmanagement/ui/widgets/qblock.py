@@ -52,9 +52,9 @@ class QBlock(QGraphicsItem):
         self.addr_to_insns = { }
         self.addr_to_labels = { }
 
-        self.setFlags(QGraphicsItem.ItemIsFocusable)
-
         self._init_widgets()
+
+        self._rect = None
 
     #
     # Properties
@@ -62,15 +62,11 @@ class QBlock(QGraphicsItem):
 
     @property
     def width(self):
-        if self._width is None:
-            self._update_size()
-        return self._width
+        return self.boundingRect().width()
 
     @property
     def height(self):
-        if self._height is None:
-            self._update_size()
-        return self._height
+        return self.boundingRect().height()
 
     #
     # Public methods
@@ -103,75 +99,34 @@ class QBlock(QGraphicsItem):
     def size(self):
         return self.width, self.height
 
-    def paint(self, painter, option, widget):
-        """
-
-        :param QPainter painter:
-        :return:
-        """
-        lod = option.levelOfDetailFromTransform(painter.worldTransform())
-        omit_text = lod < 0.3
-
-        if self.mode == 'linear':
-
-            self._paint_linear(painter)
-        else:
-            self._paint_graph(painter, omit_text)
-
     #
     # Event handlers
     #
 
-    def focusInEvent(self, event):
-        _l.debug('Block got focus!')
-        return super().focusInEvent(event)
-
-        #return super().mouseReleaseEvent(event)
-
     def mousePressEvent(self, event):
         button = event.button()
+        pos = event.pos()
         if button == Qt.LeftButton:
-            _l.debug('Detected press')
-            self._clicked = True
-
-    def mouseMoveEvent(self, event):
-        _l.debug('Detected move')
-        self._clicked = False
+            for obj in self.objects:
+                if obj.y <= pos.y() < obj.y + obj.height:
+                    obj.on_mouse_pressed(button, pos)
 
     def mouseReleaseEvent(self, event):
         button = event.button()
-        _l.debug('Detected release')
-        if self._clicked and button == Qt.LeftButton:
-            _l.debug('Block detected left click!')
+        pos = event.pos()
+        if button == Qt.RightButton:
             event.accept()
+            for obj in self.objects:
+                if obj.y <= pos.y() < obj.y + obj.height:
+                    obj.on_mouse_released(button, pos)
 
-    # def mouseReleaseEvent(self, event):
-    #     button = event.button()
-    #     pos = event.pos()
-    #     if button == Qt.RightButton:
-    #         event.accept()
-    #         for obj in self.objects:
-    #             if obj.y <= pos.y() < obj.y + obj.height:
-    #                 obj.on_mouse_released(button, pos)
-    #     if button == Qt.LeftButton:
-    #         _l.debug('Block detected left click!')
-    #         for obj in self.objects:
-    #             if obj.y <= pos.y() < obj.y + obj.height:
-    #                 obj.on_mouse_pressed(button, pos)
-    #                 break
-    #     event.ignore()
-
-    # def mouseDoubleClickEvent(self, event):
-    #     button = event.button()
-    #     pos = event.pos()
-    #     if button == Qt.LeftButton:
-    #         for obj in self.objects:
-    #             if obj.y <= pos.y() < obj.y + obj.height:
-    #                 obj.on_mouse_doubleclicked(button, pos)
-    #                 event.accept()
-    #                 return True
-
-    #     return super().mouseReleaseEvent(event)
+    def mouseDoubleClickEvent(self, event):
+        button = event.button()
+        pos = event.pos()
+        if button == Qt.LeftButton:
+            for obj in self.objects:
+                if obj.y <= pos.y() < obj.y + obj.height:
+                    obj.on_mouse_doubleclicked(button, pos)
 
     #
     # Initialization
@@ -203,38 +158,28 @@ class QBlock(QGraphicsItem):
                     variable = QVariable(self.workspace, self.disasm_view, var, self._config)
                     self.objects.append(variable)
 
-        self._update_size()
-
     #
     # Private methods
     #
 
-    def _update_size(self):
+    def boundingRect(self):
+        if self._rect is None:
+            self._rect = self._calculate_size()
+        assert self._rect is not None
+        return self._rect
 
-        # calculate height
-        self._height = len(self.objects) * self._config.disasm_font_height + \
-                      (len(self.objects) - 1) * self.SPACING
+class QGraphBlock(QBlock):
+    MINIMUM_DETAIL_LEVEL = 0.3
+    def paint(self, painter, option, widget):
+        lod = option.levelOfDetailFromTransform(painter.worldTransform())
+        should_omit_text = lod < QGraphBlock.MINIMUM_DETAIL_LEVEL
 
-        if self.mode == "graph":
-            self._height += self.TOP_PADDING
-            self._height += self.BOTTOM_PADDING
-
-        # calculate width
-
-        self._width = (max([obj.width for obj in self.objects]) if self.objects else 0) + \
-                      self.RIGHT_PADDING
-        if self.mode == "graph":
-            self._width += self.GRAPH_LEFT_PADDING
-
-        self.rect = QRectF(0, 0, self._width+10, self._height+10)
-
-    def _paint_graph(self, painter, omit_text=False):
-
-        painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+        painter.setRenderHints(
+                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
 
         painter.setFont(Conf.code_font)
         # background of the node
-        if omit_text:
+        if should_omit_text:
             painter.setBrush(QColor(0xda, 0xda, 0xda))
         else:
             painter.setBrush(QColor(0xfa, 0xfa, 0xfa))
@@ -243,8 +188,8 @@ class QBlock(QGraphicsItem):
 
         # content
 
-
-        if omit_text:
+        # if we are two far zoomed out, do not draw the text
+        if should_omit_text:
             return
 
         y_offset = self.TOP_PADDING
@@ -258,10 +203,24 @@ class QBlock(QGraphicsItem):
 
             y_offset += obj.height
 
-    def _paint_linear(self, painter):
+    def _calculate_size(self):
+        height = len(self.objects) * self._config.disasm_font_height + \
+                      (len(self.objects) - 1) * self.SPACING
 
-        # content
+        height += self.TOP_PADDING
+        height += self.BOTTOM_PADDING
 
+        # calculate width
+
+        width = (max([obj.width for obj in self.objects]) if self.objects else 0) + \
+                      self.RIGHT_PADDING
+        width += self.GRAPH_LEFT_PADDING
+
+        return QRectF(0, 0, width+10, height+10)
+
+class QLinearBlock(QBlock):
+    def paint(self, painter, option, widget):
+        _l.debug('Painting linear block')
         y_offset = 0
 
         for obj in self.objects:
@@ -272,8 +231,13 @@ class QBlock(QGraphicsItem):
 
             y_offset += obj.height
 
-    def boundingRect(self):
-        if self.rect is None:
-            self._update_size()
-        assert self.rect is not None
-        return self.rect
+    def _calculate_size(self):
+        height = len(self.objects) * self._config.disasm_font_height + \
+                      (len(self.objects) - 1) * self.SPACING
+
+        # calculate width
+
+        width = (max([obj.width for obj in self.objects]) if self.objects else 0) + \
+                      self.RIGHT_PADDING
+
+        return QRectF(0, 0, width+10, height+10)
