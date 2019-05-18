@@ -21,7 +21,6 @@ from .qgraph_object import QGraphObject
 import logging
 
 _l = logging.getLogger(__name__)
-_l.setLevel(logging.DEBUG)
 
 class QBlock(QGraphicsItem):
     TOP_PADDING = 5
@@ -30,7 +29,7 @@ class QBlock(QGraphicsItem):
     RIGHT_PADDING = 10
     SPACING = 0
 
-    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, addr, cfg_nodes, out_branches, mode='graph'):
+    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, addr, cfg_nodes, out_branches):
         super(QBlock, self).__init__()
 
         # initialization
@@ -43,8 +42,6 @@ class QBlock(QGraphicsItem):
         self.addr = addr
         self.cfg_nodes = cfg_nodes
         self.out_branches = out_branches
-
-        self.mode = mode  # 'graph' or 'linear'
 
         self._config = Conf
 
@@ -140,13 +137,13 @@ class QBlock(QGraphicsItem):
             if isinstance(obj, Instruction):
                 out_branch = get_out_branches_for_insn(self.out_branches, obj.addr)
                 insn = QInstruction(self.workspace, self.func_addr, self.disasm_view, self.disasm,
-                                    self.infodock, obj, out_branch, self._config, mode=self.mode,
+                                    self.infodock, obj, out_branch, self._config,
                                     )
                 self.objects.append(insn)
                 self.addr_to_insns[obj.addr] = insn
             elif isinstance(obj, Label):
                 # label
-                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, mode=self.mode)
+                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view)
                 self.objects.append(label)
                 self.addr_to_labels[obj.addr] = label
             elif isinstance(obj, PhiVariable):
@@ -226,6 +223,7 @@ class QLinearBlock(QBlock):
         for obj in self.objects:
             y_offset += self.SPACING
 
+            obj.x = 0
             obj.y = y_offset
             obj.paint(painter)
 

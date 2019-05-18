@@ -7,7 +7,7 @@ from ...data.instance import ObjectContainer
 from ...utils import locate_function
 from ...data.function_graph import FunctionGraph
 from ...logic.disassembly import JumpHistory, InfoDock
-from ..widgets import QDisasmGraph, QDisasmStatusBar, QLinearViewer
+from ..widgets import QDisasmGraph, QDisasmStatusBar, QLinearViewer, QLinear
 from ..dialogs.jumpto import JumpTo
 from ..dialogs.rename_label import RenameLabel
 from ..dialogs.set_comment import SetComment
@@ -28,7 +28,7 @@ class DisassemblyView(BaseView):
         # whether we want to show identifier or not
         self._show_variable_ident = False
 
-        self._linear_viewer = None  # type: QLinearViewer
+        self._linear_viewer = QLinear(self.workspace, disasm_view=self, parent=self)
         self._flow_graph = None  # type: QDisasmGraph
         self._statusbar = None
         self._jump_history = JumpHistory()
@@ -55,9 +55,9 @@ class DisassemblyView(BaseView):
 
         # Initialize the linear viewer
         # TODO: Relocate the logic to a better place
-        self._linear_viewer.cfg = self.workspace.instance.cfg
-        self._linear_viewer.cfb = self.workspace.instance.cfb
-        self._linear_viewer.initialize()
+        #self._linear_viewer.cfg = self.workspace.instance.cfg
+        #self._linear_viewer.cfb = self.workspace.instance.cfb
+        #self._linear_viewer.initialize()
 
     def save_image_to(self, path):
         if self._flow_graph is not None:
@@ -207,16 +207,18 @@ class DisassemblyView(BaseView):
             'block': the `QBlock` containing the instruction
         :param callback: The callback function to call, which must accept **kwargs
         """
-        self._linear_viewer.selected_insns.am_subscribe(callback)
+        #self._linear_viewer.selected_insns.am_subscribe(callback)
         self._flow_graph.selected_insns.am_subscribe(callback)
 
     def toggle_disasm_view(self):
         if self._flow_graph.isHidden():
             self._linear_viewer.hide()
             self._flow_graph.show()
+            self._flow_graph.setFocus()
         else:
             self._linear_viewer.show()
             self._flow_graph.hide()
+            self._linear_viewer.setFocus()
 
     def display_disasm_graph(self):
 
@@ -228,10 +230,10 @@ class DisassemblyView(BaseView):
 
         self._flow_graph.hide()
         self._linear_viewer.show()
-        self._linear_viewer._linear_view.setFocus()
+        #self._linear_viewer._linear_view.setFocus()
 
-        if self._current_function is not None:
-            self._linear_viewer.navigate_to_addr(self._current_function.addr)
+        # if self._current_function is not None:
+        #     self._linear_viewer.navigate_to_addr(self._current_function.addr)
 
     def display_function(self, function):
 
@@ -254,7 +256,7 @@ class DisassemblyView(BaseView):
         self.infodock.smart_highlighting = enabled
 
         self._flow_graph.refresh()
-        self._linear_viewer.refresh()
+        #self._linear_viewer.refresh()
 
     def toggle_show_address(self, show_address):
         """
@@ -403,7 +405,7 @@ class DisassemblyView(BaseView):
     #
 
     def _init_widgets(self):
-        self._linear_viewer = QLinearViewer(self.workspace, self)
+        #self._linear_viewer = QLinearViewer(self.workspace, self)
         self._flow_graph = QDisasmGraph(self.workspace, self)
 
         self._statusbar = QDisasmStatusBar(self, parent=self)
@@ -477,7 +479,8 @@ class DisassemblyView(BaseView):
             })
 
         elif self._linear_viewer.isVisible():
-            self._linear_viewer.navigate_to_addr(the_func.addr)
+            pass
+            #self._linear_viewer.navigate_to_addr(the_func.addr)
 
     def _jump_to(self, addr):
         function = locate_function(self.workspace.instance, addr)

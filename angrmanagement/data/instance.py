@@ -4,12 +4,12 @@ from threading import Thread
 from queue import Queue
 
 import ana
+from PySide2.QtCore import QObject, Signal, Slot
 
 from .jobs import CFGGenerationJob
 from ..logic import GlobalInfo
 from ..logic.threads import gui_thread_schedule_async
 from ..utils.namegen import NameGenerator
-
 class EventSentinel(object):
     def __init__(self):
         self.am_subscribers = []
@@ -90,8 +90,12 @@ class ObjectContainer(EventSentinel):
         return '(container %s)%s' % (self.am_name, repr(self._am_obj))
 
 
-class Instance(object):
+class Instance(QObject):
+    cfg_updated = Signal()
+    cfb_updated = Signal()
+
     def __init__(self, project=None):
+        super().__init__()
         self.project = project
 
         self.workspace = None
@@ -100,6 +104,7 @@ class Instance(object):
         self._jobs_queue = Queue()
         self.simgrs = ObjectContainer([], name='Global simulation managers list')
         self.states = ObjectContainer([], name='Global states list')
+
 
         self._start_worker()
 
@@ -122,6 +127,7 @@ class Instance(object):
     @cfg.setter
     def cfg(self, v):
         self._cfg = v
+        self.cfg_updated.emit()
 
         # notify the workspace
         if self.workspace is not None:
@@ -134,6 +140,7 @@ class Instance(object):
     @cfb.setter
     def cfb(self, v):
         self._cfb = v
+        self.cfb_updated.emit()
 
     #
     # Public methods

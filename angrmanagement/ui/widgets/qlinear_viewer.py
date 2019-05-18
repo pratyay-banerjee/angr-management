@@ -2,7 +2,7 @@ import logging
 
 from PySide2.QtWidgets import QWidget, QHBoxLayout, QAbstractSlider, QGraphicsView, QGraphicsScene, QGraphicsItem
 from PySide2.QtGui import QPainter, QWheelEvent
-from PySide2.QtCore import Qt, QPointF
+from PySide2.QtCore import Qt, QPointF, Slot, QPoint, QMarginsF
 from sortedcontainers import SortedDict
 
 from angr.block import Block
@@ -13,7 +13,78 @@ from .qblock import QLinearBlock
 from .qunknown_block import QUnknownBlock
 
 _l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
+class QLinear(QGraphicsView):
+
+    def __init__(self, workspace, disasm_view, parent=None):
+        super().__init__(parent=parent)
+
+        self.workspace = workspace
+        self.disasm_view = disasm_view
+
+        self.workspace.instance.cfg_updated.connect(self._add_items)
+        self.workspace.instance.cfb_updated.connect(self._add_items)
+
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.horizontalScrollBar().setSingleStep(Conf.disasm_font_width)
+        self.verticalScrollBar().setSingleStep(Conf.disasm_font_height)
+
+        #self.setInteractive(True)
+        self.setTransformationAnchor(QGraphicsView.NoAnchor)
+        #self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+        self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+        self._disasms = { }
+        self._add_items()
+
+    @property
+    def cfg(self):
+        return self.workspace.instance.cfg
+
+    @property
+    def cfb(self):
+        return self.workspace.instance.cfb
+
+    @Slot()
+    def _add_items(self):
+        self.setScene(QGraphicsScene(self))
+        x, y = 0, 0
+        _l.debug('Refreshing QLinear')
+        if self.cfb is None:
+            return
+        for obj_addr, obj in self.cfb.floor_items():
+            if isinstance(obj, Block):
+                cfg_node = self.cfg.get_any_node(obj_addr, force_fastpath=True)
+                func_addr = cfg_node.function_address
+                func = self.cfg.kb.functions[func_addr]  # FIXME: Resiliency
+                disasm = self._get_disasm(func)
+                qobject = QLinearBlock(self.workspace, func_addr, self.disasm_view, disasm,
+                                 self.disasm_view.infodock, obj.addr, [obj], {},
+                                 )
+                self.scene().addItem(qobject)
+                _l.debug('Adding item')
+                qobject.setPos(x, y)
+                y += qobject.height
+
+        margins = QMarginsF(50, 25, 10, 25)
+
+        itemsBoundingRect = self.scene().itemsBoundingRect()
+        paddedRect = itemsBoundingRect.marginsAdded(margins)
+        self.setSceneRect(paddedRect)
+        self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+
+    def _get_disasm(self, func):
+        """
+
+        :param func:
+        :return:
+        """
+
+        if func.addr not in self._disasms:
+            self._disasms[func.addr] = self.workspace.instance.project.analyses.Disassembly(function=func)
+        return self._disasms[func.addr]
 
 class QLinearGraphicsView(QGraphicsView):
 
@@ -31,7 +102,7 @@ class QLinearGraphicsView(QGraphicsView):
 
         self.verticalScrollBar().actionTriggered.connect(self._on_vertical_scroll_bar_triggered)
 
-        self.setScene(QGraphicsScene())
+        self.setScene(QGraphicsScene(self))
         self._paint_objects()
 
     #
@@ -183,10 +254,10 @@ class QLinearGraphicsView(QGraphicsView):
         x = 80
         y = int(-self.viewer.start_line_in_object * self.line_height())
 
-        breakpoint()
         for obj in self.viewer.objects:
             if not isinstance(obj, QGraphicsItem):
                 continue
+            _l.debug('Adding object %s', obj)
             self.scene().addItem(obj)
             obj.setPos(QPointF(x, y))
 
@@ -198,6 +269,7 @@ class QLinearGraphicsView(QGraphicsView):
         # TODO: horizontalScrollbar().setRange()
 
         self._update_size()
+        self._paint_objects()
 
     # def _get_object_by_pos(self, pos):
     #     x, y = pos.x(), pos.y()
@@ -216,8 +288,6 @@ class QLinearViewer(QWidget):
 
         self.workspace = workspace
         self.disasm_view = disasm_view
-
-        self.objects = [ ]  # Objects that will be painted
 
         self.cfg = None
         self.cfb = None
@@ -316,102 +386,6 @@ class QLinearViewer(QWidget):
         self.prepare_objects(offset)
 
         self._linear_view.refresh()
-
-    def prepare_objects(self, offset, start_line=0):
-        """
-        Prepare objects to print based on offset and start_line. Update self.objects, self._offset, and
-        self._start_line_in_object.
-
-        :param int offset:      Beginning offset (in bytes) to display in the linear viewer.
-        :param int start_line:  The first line into the first object to display in the linear viewer.
-        :return:                None
-        """
-
-        if offset == self._offset and start_line == self._start_line_in_object:
-            return
-
-        # Convert the offset to memory region
-        base_offset, mr = self._region_from_offset(offset)  # type: int,MemoryRegion
-        if mr is None:
-            return
-
-        addr = self._addr_from_offset(mr, base_offset, offset)
-        _l.debug("Address %#x, offset %d, start_line %d.", addr, offset, start_line)
-
-        if start_line < 0:
-            # Which object are we currently displaying at the top of the disassembly view?
-            try:
-                top_obj_addr = self.cfb.floor_addr(addr=addr)
-            except KeyError:
-                top_obj_addr = addr
-
-            # Reverse-iterate until we have enough lines to compensate start_line
-            for obj_addr, obj in self.cfb.ceiling_items(addr=top_obj_addr, reverse=True, include_first=False):
-                qobject = self._obj_to_paintable(obj_addr, obj)
-                if qobject is None:
-                    continue
-                object_lines = int(qobject.height // self._linear_view.line_height())
-                _l.debug("Compensating negative start_line: object %s, object_lines %d.", obj, object_lines)
-                start_line += object_lines
-                if start_line >= 0:
-                    addr = obj_addr
-                    # Update offset
-                    new_region_addr = next(self._addr_to_region_offset.irange(maximum=addr, reverse=True))
-                    new_region_offset = self._addr_to_region_offset[new_region_addr]
-                    offset = (addr - new_region_addr) + new_region_offset
-                    break
-            else:
-                # umm we don't have enough objects to compensate the negative start_line
-                start_line = 0
-                # update addr and offset to their minimal values
-                addr = next(self._addr_to_region_offset.irange())
-                offset = self._addr_to_region_offset[addr]
-
-        _l.debug("After adjustment: Address %#x, offset %d, start_line %d.", addr, offset, start_line)
-
-        self.objects = []
-
-        viewable_lines = int(self._linear_view.height() // self._linear_view.line_height())
-        lines = 0
-        start_line_in_object = 0
-
-        # Load a page of objects
-        for obj_addr, obj in self.cfb.floor_items(addr=addr):
-            qobject = self._obj_to_paintable(obj_addr, obj)
-            if qobject is None:
-                # Conversion failed
-                continue
-
-            object_lines = int(qobject.height // self._linear_view.line_height())
-
-            if start_line >= object_lines:
-                # this object should be skipped. ignore it
-                start_line -= object_lines
-                # adjust the offset as well
-                if obj_addr <= addr < obj_addr + obj.size:
-                    offset += obj_addr + obj.size - addr
-                else:
-                    offset += obj.size
-                _l.debug("Skipping object %s (size %d). New offset: %d.", obj, obj.size, offset)
-            else:
-                if start_line > 0:
-                    _l.debug("First object to paint: %s (size %d). Current offset %d.", obj, obj.size, offset)
-                    # this is the first object to paint
-                    start_line_in_object = start_line
-                    start_line = 0
-                    lines += object_lines - start_line_in_object
-                else:
-                    lines += object_lines
-                self.objects.append(qobject)
-
-            if lines > viewable_lines:
-                break
-
-        _l.debug("Final offset %d, start_line_in_object %d.", offset, start_line_in_object)
-
-        # Update properties
-        self._offset = offset
-        self._start_line_in_object = start_line_in_object
 
     #
     # Private methods
