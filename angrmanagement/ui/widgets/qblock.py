@@ -23,8 +23,8 @@ import logging
 _l = logging.getLogger(__name__)
 
 class QBlock(QGraphicsItem):
-    TOP_PADDING = 5
-    BOTTOM_PADDING = 5
+    TOP_PADDING = 0
+    BOTTOM_PADDING = 0
     GRAPH_LEFT_PADDING = 10
     RIGHT_PADDING = 10
     SPACING = 0
@@ -167,7 +167,8 @@ class QBlock(QGraphicsItem):
 
 class QGraphBlock(QBlock):
     MINIMUM_DETAIL_LEVEL = 0.3
-    def paint(self, painter, option, widget):
+
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         should_omit_text = lod < QGraphBlock.MINIMUM_DETAIL_LEVEL
 
@@ -216,7 +217,7 @@ class QGraphBlock(QBlock):
         return QRectF(0, 0, width+10, height+10)
 
 class QLinearBlock(QBlock):
-    def paint(self, painter, option, widget):
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
         _l.debug('Painting linear block')
         y_offset = 0
 
@@ -238,4 +239,4 @@ class QLinearBlock(QBlock):
         width = (max([obj.width for obj in self.objects]) if self.objects else 0) + \
                       self.RIGHT_PADDING
 
-        return QRectF(0, 0, width+10, height+10)
+        return QRectF(0, 0, width, height)

@@ -2,12 +2,14 @@
 from PySide2.QtCore import Qt
 
 from ...config import Conf
-from .qgraph_object import QGraphObject
+from PySide2.QtWidgets import QGraphicsItem
+from PySide2.QtCore import QRectF
 
 
-class QUnknownBlock(QGraphObject):
+class QUnknownBlock(QGraphicsItem):
 
     LINEAR_INSTRUCTION_OFFSET = 120
+    DEFAULT_TEXT = 'Unknown'
 
     def __init__(self, workspace, addr, bytes_):
 
@@ -26,33 +28,24 @@ class QUnknownBlock(QGraphObject):
         self._init_widgets()
 
     #
-    # Properties
+    # Public methods
     #
 
     @property
     def width(self):
-        if self._width is None:
-            self._update_size()
-        return self._width
+        return self.boundingRect().width()
 
     @property
     def height(self):
-        if self._height is None:
-            self._update_size()
-        return self._height
+        return self.boundingRect().height()
 
-    #
-    # Public methods
-    #
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
 
-    def paint(self, painter):
-
-        x = self.x
-        y = self.y
+        x, y = 0, 0
 
         # Address
         painter.setPen(Qt.black)
-        painter.drawText(x, y + Conf.disasm_font_ascent, self._addr_text)
+        painter.drawText(x, y+Conf.disasm_font_ascent, self._addr_text)
         x += self._addr_width
 
         x += self.LINEAR_INSTRUCTION_OFFSET
@@ -60,10 +53,27 @@ class QUnknownBlock(QGraphObject):
         # Content
         if self._bytes_text:
             for line in self._bytes_text:
-                painter.drawText(x, y + Conf.disasm_font_ascent, line)
+                painter.drawText(x, y+Conf.disasm_font_ascent, line)
                 y += Conf.disasm_font_height
         else:
-            painter.drawText(x, y + Conf.disasm_font_ascent, "Unknown")
+            painter.drawText(x, y+Conf.disasm_font_ascent, QUnknownBlock.DEFAULT_TEXT)
+
+    def boundingRect(self):
+        height, width = 0, 0
+
+        width += self._addr_width
+        width += self.LINEAR_INSTRUCTION_OFFSET
+
+        if self._bytes_text:
+            height += Conf.disasm_font_height * len(self._bytes_text)
+        else:
+            height += Conf.disasm_font_height
+
+        if self._bytes_text:
+            width += max(len(line) for line in self._bytes_text) * Conf.disasm_font_width
+        else:
+            width += Conf.disasm_font_metrics.width(QUnknownBlock.DEFAULT_TEXT)
+        return QRectF(0, 0, width, height)
 
     #
     # Private methods
@@ -91,7 +101,3 @@ class QUnknownBlock(QGraphObject):
 
         else:
             self._bytes_height = Conf.disasm_font_height
-
-    def _update_size(self):
-        self._height = self._bytes_height
-        self._width = 20

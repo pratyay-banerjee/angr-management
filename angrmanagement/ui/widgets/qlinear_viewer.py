@@ -16,6 +16,7 @@ _l = logging.getLogger(__name__)
 _l.setLevel(logging.DEBUG)
 
 class QLinear(QGraphicsView):
+    OBJECT_PADDING = 0
 
     def __init__(self, workspace, disasm_view, parent=None):
         super().__init__(parent=parent)
@@ -63,10 +64,12 @@ class QLinear(QGraphicsView):
                 qobject = QLinearBlock(self.workspace, func_addr, self.disasm_view, disasm,
                                  self.disasm_view.infodock, obj.addr, [obj], {},
                                  )
-                self.scene().addItem(qobject)
-                _l.debug('Adding item')
-                qobject.setPos(x, y)
-                y += qobject.height
+            elif isinstance(obj, Unknown):
+                qobject = QUnknownBlock(self.workspace, obj_addr, obj.bytes)
+            self.scene().addItem(qobject)
+            _l.debug('Adding item')
+            qobject.setPos(x, y)
+            y += qobject.height + self.OBJECT_PADDING
 
         margins = QMarginsF(50, 25, 10, 25)
 
@@ -254,6 +257,7 @@ class QLinearGraphicsView(QGraphicsView):
         x = 80
         y = int(-self.viewer.start_line_in_object * self.line_height())
 
+        breakpoint()
         for obj in self.viewer.objects:
             if not isinstance(obj, QGraphicsItem):
                 continue
