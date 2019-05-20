@@ -59,7 +59,7 @@ class QDisasmGraph(QAssemblyLevelGraph):
         if v is not self._function_graph:
             self._function_graph = v
 
-            self._reload()
+            self.reload()
 
     @property
     def infodock(self):
@@ -78,27 +78,17 @@ class QDisasmGraph(QAssemblyLevelGraph):
     #
 
     def reload(self):
-        self._reload()
-        #self.disasm = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
-        # self.workspace.view_manager.first_view_in_category('console').push_namespace({
-        #     'disasm': self.disasm,
-        # })
-
-        #self._clear_insn_addr_block_mapping()
-        #self.blocks.clear()
-
-
-    def _reload(self):
+        _l.debug('Reloading disassembly graph')
         self._reset_scene()
-        self.disasm = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
+        if self._function_graph.function not in DISASM_CACHE:
+            DISASM_CACHE[self._function_graph.function] = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
+        self.disasm = DISASM_CACHE[self._function_graph.function]
         self.workspace.view_manager.first_view_in_category('console').push_namespace({
             'disasm': self.disasm,
         })
 
         self._clear_insn_addr_block_mapping()
         self.blocks.clear()
-
-        _l.debug('Made it here')
 
         supergraph = self._function_graph.supergraph
         for n in supergraph.nodes():
@@ -109,13 +99,8 @@ class QDisasmGraph(QAssemblyLevelGraph):
 
             for insn_addr in block.addr_to_insns.keys():
                 self._add_insn_addr_block_mapping(insn_addr, block)
-        _l.debug('And here')
 
         self.request_relayout()
-
-        _l.debug('And also here')
-
-        # determine initial view focus point
 
         # determine initial view focus point
         self._reset_view()
@@ -160,7 +145,6 @@ class QDisasmGraph(QAssemblyLevelGraph):
 
 
     def mousePressEvent(self, event):
-        _l.debug('DG received mouse press')
         btn = event.button()
         if btn == Qt.ForwardButton:
             self.disassembly_view.jump_forward()
@@ -272,7 +256,6 @@ class QDisasmGraph(QAssemblyLevelGraph):
         # layout nodes
         for block in self.blocks:
             x, y = node_coords[block.addr]
-            _l.debug('Placing block (addr 0x%x) at (%d, %d)', block.addr, x, y)
             block.setPos(x, y)
 
         for edge in self._edges:

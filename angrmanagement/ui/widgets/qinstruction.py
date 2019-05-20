@@ -48,6 +48,8 @@ class QInstruction(QGraphObject):
 
         self._is_initialized = False
 
+        self._init_widgets()
+
         #self.setContextMenuPolicy(Qt.CustomContextMenu)
         #self.connect(self, SIGNAL('customContextMenuRequested(QPoint)'), self._on_context_menu)
 

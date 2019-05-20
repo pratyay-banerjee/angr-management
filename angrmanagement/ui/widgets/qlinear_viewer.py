@@ -46,10 +46,6 @@ class QLinearDisassembly(QSaveableGraphicsView):
     def cfb(self):
         return self.workspace.instance.cfb
 
-    def setFocus(self):
-        self._add_items()
-        super().setFocus()
-
     @Slot()
     def _add_items(self):
         self.scene().clear()

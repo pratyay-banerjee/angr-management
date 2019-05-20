@@ -150,11 +150,11 @@ class QBlock(QGraphicsItem):
                 self.addr_to_labels[obj.addr] = label
             elif isinstance(obj, PhiVariable):
                 if not isinstance(obj.variable, SimRegisterVariable):
-                    phivariable = QPhiVariable(self.workspace, self.disasm_view, obj, self._config, mode=self.mode)
+                    phivariable = QPhiVariable(self.workspace, self.disasm_view, obj, self._config)
                     self.objects.append(phivariable)
             elif isinstance(obj, Variables):
                 for var in obj.variables:
-                    variable = QVariable(self.workspace, self.disasm_view, var, self._config, mode=self.mode)
+                    variable = QVariable(self.workspace, self.disasm_view, var, self._config)
                     self.objects.append(variable)
 
     #
