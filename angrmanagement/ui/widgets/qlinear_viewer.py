@@ -11,11 +11,11 @@ from angr.analyses.cfg.cfb import Unknown, MemoryRegion
 from ...config import Conf
 from .qblock import QLinearBlock
 from .qunknown_block import QUnknownBlock
+from .qgraph import QSaveableGraphicsView
 
 _l = logging.getLogger(__name__)
-_l.setLevel(logging.DEBUG)
 
-class QLinear(QGraphicsView):
+class QLinearDisassembly(QSaveableGraphicsView):
     OBJECT_PADDING = 0
 
     def __init__(self, workspace, disasm_view, parent=None):
@@ -24,17 +24,15 @@ class QLinear(QGraphicsView):
         self.workspace = workspace
         self.disasm_view = disasm_view
 
+        self.setScene(QGraphicsScene(self))
+
         self.workspace.instance.cfg_updated.connect(self._add_items)
         self.workspace.instance.cfb_updated.connect(self._add_items)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.horizontalScrollBar().setSingleStep(Conf.disasm_font_width)
-        self.verticalScrollBar().setSingleStep(Conf.disasm_font_height)
 
-        #self.setInteractive(True)
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
-        #self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         self._disasms = { }
@@ -48,9 +46,13 @@ class QLinear(QGraphicsView):
     def cfb(self):
         return self.workspace.instance.cfb
 
+    def setFocus(self):
+        self._add_items()
+        super().setFocus()
+
     @Slot()
     def _add_items(self):
-        self.setScene(QGraphicsScene(self))
+        self.scene().clear()
         x, y = 0, 0
         _l.debug('Refreshing QLinear')
         if self.cfb is None:

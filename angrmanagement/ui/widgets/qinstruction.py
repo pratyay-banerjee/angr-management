@@ -46,7 +46,7 @@ class QInstruction(QGraphObject):
         self._comment = None
         self._comment_width = None
 
-        self._init_widgets()
+        self._is_initialized = False
 
         #self.setContextMenuPolicy(Qt.CustomContextMenu)
         #self.connect(self, SIGNAL('customContextMenuRequested(QPoint)'), self._on_context_menu)
@@ -117,12 +117,13 @@ class QInstruction(QGraphObject):
                     return
 
             self.disasm_view.toggle_instruction_selection(self.insn.addr)
-
-    def on_mouse_released(self, button, pos):
-        if button == Qt.RightButton:
+        elif button == Qt.RightButton:
             # right click
             # display the context menu
             self.disasm_view.instruction_context_menu(self.insn, QCursor.pos())
+
+    def on_mouse_released(self, button, pos):
+        pass
 
     def on_mouse_doubleclicked(self, button, pos):
 
@@ -153,6 +154,11 @@ class QInstruction(QGraphObject):
                 r, g, b = 0xef, 0xbf, 0xba
 
         return r, g, b
+
+    def _lazy_paint(self):
+        if not self._is_initialized:
+            self._init_widgets()
+            self._is_initialized = True
 
     def _init_widgets(self):
 
@@ -215,6 +221,7 @@ class QInstruction(QGraphObject):
             painter.drawRect(self.x, self.y, self.width, self.height)
 
     def _paint_graph(self, painter):
+        self._lazy_paint()
 
         self._paint_highlight(painter)
 
@@ -259,6 +266,8 @@ class QInstruction(QGraphObject):
             painter.drawText(x, self.y + self._config.disasm_font_ascent, self._string)
 
     def _paint_linear(self, painter):
+
+        self._lazy_paint()
 
         self._paint_highlight(painter)
 

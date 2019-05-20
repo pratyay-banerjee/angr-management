@@ -16,7 +16,6 @@ from .qinstruction import QInstruction
 from .qblock_label import QBlockLabel
 from .qphivariable import QPhiVariable
 from .qvariable import QVariable
-from .qgraph_object import QGraphObject
 
 import logging
 
@@ -29,8 +28,8 @@ class QBlock(QGraphicsItem):
     RIGHT_PADDING = 10
     SPACING = 0
 
-    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, addr, cfg_nodes, out_branches):
-        super(QBlock, self).__init__()
+    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, addr, cfg_nodes, out_branches, parent=None):
+        super().__init__(parent=parent)
 
         # initialization
         self.workspace = workspace
@@ -56,6 +55,10 @@ class QBlock(QGraphicsItem):
     #
     # Properties
     #
+
+    @property
+    def mode(self):
+        raise NotImplementedError
 
     @property
     def width(self):
@@ -111,7 +114,7 @@ class QBlock(QGraphicsItem):
     def mouseReleaseEvent(self, event):
         button = event.button()
         pos = event.pos()
-        if button == Qt.RightButton:
+        if button == Qt.RightButton or button == Qt.LeftButton:
             event.accept()
             for obj in self.objects:
                 if obj.y <= pos.y() < obj.y + obj.height:
@@ -137,22 +140,21 @@ class QBlock(QGraphicsItem):
             if isinstance(obj, Instruction):
                 out_branch = get_out_branches_for_insn(self.out_branches, obj.addr)
                 insn = QInstruction(self.workspace, self.func_addr, self.disasm_view, self.disasm,
-                                    self.infodock, obj, out_branch, self._config,
-                                    )
+                                    self.infodock, obj, out_branch, self._config, mode=self.mode)
                 self.objects.append(insn)
                 self.addr_to_insns[obj.addr] = insn
             elif isinstance(obj, Label):
                 # label
-                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view)
+                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, mode=self.mode)
                 self.objects.append(label)
                 self.addr_to_labels[obj.addr] = label
             elif isinstance(obj, PhiVariable):
                 if not isinstance(obj.variable, SimRegisterVariable):
-                    phivariable = QPhiVariable(self.workspace, self.disasm_view, obj, self._config)
+                    phivariable = QPhiVariable(self.workspace, self.disasm_view, obj, self._config, mode=self.mode)
                     self.objects.append(phivariable)
             elif isinstance(obj, Variables):
                 for var in obj.variables:
-                    variable = QVariable(self.workspace, self.disasm_view, var, self._config)
+                    variable = QVariable(self.workspace, self.disasm_view, var, self._config, mode=self.mode)
                     self.objects.append(variable)
 
     #
@@ -167,6 +169,10 @@ class QBlock(QGraphicsItem):
 
 class QGraphBlock(QBlock):
     MINIMUM_DETAIL_LEVEL = 0.3
+
+    @property
+    def mode(self):
+        return 'graph'
 
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
@@ -217,6 +223,10 @@ class QGraphBlock(QBlock):
         return QRectF(0, 0, width+10, height+10)
 
 class QLinearBlock(QBlock):
+    @property
+    def mode(self):
+        return 'linear'
+
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         _l.debug('Painting linear block')
         y_offset = 0

@@ -1,3 +1,4 @@
+import logging
 from typing import Union, Callable
 
 from PySide2.QtWidgets import QVBoxLayout, QMenu, QApplication
@@ -7,7 +8,7 @@ from ...data.instance import ObjectContainer
 from ...utils import locate_function
 from ...data.function_graph import FunctionGraph
 from ...logic.disassembly import JumpHistory, InfoDock
-from ..widgets import QDisasmGraph, QDisasmStatusBar, QLinearViewer, QLinear
+from ..widgets import QDisasmGraph, QDisasmStatusBar, QLinearDisassembly
 from ..dialogs.jumpto import JumpTo
 from ..dialogs.rename_label import RenameLabel
 from ..dialogs.set_comment import SetComment
@@ -16,6 +17,8 @@ from ..dialogs.xref import XRef
 from ..menus.disasm_insn_context_menu import DisasmInsnContextMenu
 from .view import BaseView
 
+_l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
 class DisassemblyView(BaseView):
     def __init__(self, workspace, *args, **kwargs):
@@ -28,7 +31,7 @@ class DisassemblyView(BaseView):
         # whether we want to show identifier or not
         self._show_variable_ident = False
 
-        self._linear_viewer = QLinear(self.workspace, disasm_view=self, parent=self)
+        self._linear_viewer = QLinearDisassembly(self.workspace, disasm_view=self, parent=self)
         self._flow_graph = None  # type: QDisasmGraph
         self._statusbar = None
         self._jump_history = JumpHistory()
@@ -303,8 +306,10 @@ class DisassemblyView(BaseView):
         """
 
         if insn_addr in self.current_graph.selected_insns:
+            _l.debug('Case 1')
             self.current_graph.unselect_instruction(insn_addr)
         else:
+            _l.debug('Case 2')
             self.current_graph.select_instruction(insn_addr, unique=QApplication.keyboardModifiers() & Qt.CTRL == 0)
             self.current_graph.show_instruction(insn_addr)
 

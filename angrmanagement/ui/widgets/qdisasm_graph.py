@@ -1,7 +1,7 @@
 from functools import wraps
 import logging
 
-from PySide2.QtCore import QPointF, QRectF, Qt, QPoint, QSize, QMarginsF
+from PySide2.QtCore import QPointF, QRectF, Qt, QPoint, QSize, QMarginsF, QEvent
 from PySide2.QtGui import QPainter, QBrush, QColor, QMouseEvent, QResizeEvent, QPen, QImage
 from PySide2.QtWidgets import QApplication
 
@@ -12,10 +12,10 @@ from ...utils.cfg import categorize_edges
 from ...utils.edge import EdgeSort
 from .qblock import QGraphBlock
 from .qgraph_arrow import QGraphArrow
-from .qgraph import QBaseGraph
+from .qgraph import QZoomableDraggableGraphicsView, QAssemblyLevelGraph
 
-l = logging.getLogger('ui.widgets.qflow_graph')
-#l.setLevel(logging.DEBUG)
+_l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
 def timeit(f):
     @wraps(f)
@@ -30,10 +30,10 @@ def timeit(f):
     return decorator
 
 
-class QDisasmGraph(QBaseGraph):
+class QDisasmGraph(QAssemblyLevelGraph):
 
     def __init__(self, workspace, parent=None):
-        super(QDisasmGraph, self).__init__(workspace, parent=parent)
+        super().__init__(workspace, parent=parent)
 
         self.disassembly_view = parent
         self.disasm = None
@@ -59,7 +59,7 @@ class QDisasmGraph(QBaseGraph):
         if v is not self._function_graph:
             self._function_graph = v
 
-            self.reload()
+            self._reload()
 
     @property
     def infodock(self):
@@ -78,6 +78,17 @@ class QDisasmGraph(QBaseGraph):
     #
 
     def reload(self):
+        self._reload()
+        #self.disasm = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
+        # self.workspace.view_manager.first_view_in_category('console').push_namespace({
+        #     'disasm': self.disasm,
+        # })
+
+        #self._clear_insn_addr_block_mapping()
+        #self.blocks.clear()
+
+
+    def _reload(self):
         self._reset_scene()
         self.disasm = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
         self.workspace.view_manager.first_view_in_category('console').push_namespace({
@@ -87,31 +98,27 @@ class QDisasmGraph(QBaseGraph):
         self._clear_insn_addr_block_mapping()
         self.blocks.clear()
 
+        _l.debug('Made it here')
 
         supergraph = self._function_graph.supergraph
         for n in supergraph.nodes():
             block = QGraphBlock(self.workspace, self._function_graph.function.addr, self.disassembly_view, self.disasm,
-                           self.infodock, n.addr, n.cfg_nodes, get_out_branches(n)
-                           )
-            self.scene.addItem(block)
+                           self.infodock, n.addr, n.cfg_nodes, get_out_branches(n))
+            self.scene().addItem(block)
             self.blocks.append(block)
 
             for insn_addr in block.addr_to_insns.keys():
                 self._add_insn_addr_block_mapping(insn_addr, block)
+        _l.debug('And here')
 
         self.request_relayout()
-        self.setScene(self.scene)
+
+        _l.debug('And also here')
 
         # determine initial view focus point
-        entry_block = self._insn_addr_to_block[self._function_graph.function.addr]
-        entry_block_rect = entry_block.mapRectToScene(entry_block.boundingRect())
-        viewport_height = self.viewport().rect().height()
-        min_rect = self.scene.itemsBoundingRect()
-        if min_rect.height() < (viewport_height // 1.5):
-            self.centerOn(min_rect.center())
-        else:
-            focus_point = (entry_block_rect.center().x(), entry_block_rect.top() + (viewport_height // 4))
-            self.centerOn(*focus_point)
+
+        # determine initial view focus point
+        self._reset_view()
 
         # show the graph
         self.show()
@@ -125,11 +132,35 @@ class QDisasmGraph(QBaseGraph):
 
         self.request_relayout()
 
+    def _initial_position(self):
+        entry_block = self._insn_addr_to_block[self._function_graph.function.addr]
+        entry_block_rect = entry_block.mapRectToScene(entry_block.boundingRect())
+        viewport_height = self.viewport().rect().height()
+        min_rect = self.scene().itemsBoundingRect()
+        if min_rect.height() < (viewport_height // 1.5):
+            return min_rect.center()
+        else:
+            focus_point = (entry_block_rect.center().x(), entry_block_rect.top() + (viewport_height // 4))
+            return QPointF(*focus_point)
+
     #
     # Event handlers
     #
 
+    def event(self, event):
+        """
+        Reimplemented to capture the Tab keypress event.
+        """
+
+        # by default, the tab key moves focus. Hijack the tab key
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Tab:
+            self.keyPressEvent(event)
+            return True
+        return super().event(event)
+
+
     def mousePressEvent(self, event):
+        _l.debug('DG received mouse press')
         btn = event.button()
         if btn == Qt.ForwardButton:
             self.disassembly_view.jump_forward()
@@ -241,12 +272,12 @@ class QDisasmGraph(QBaseGraph):
         # layout nodes
         for block in self.blocks:
             x, y = node_coords[block.addr]
-            l.debug('Placing block (addr 0x%x) at (%d, %d)', block.addr, x, y)
+            _l.debug('Placing block (addr 0x%x) at (%d, %d)', block.addr, x, y)
             block.setPos(x, y)
 
         for edge in self._edges:
             arrow = QGraphArrow(edge)
-            self.scene.addItem(arrow)
+            self.scene().addItem(arrow)
             arrow.setPos(QPointF(*edge.coordinates[0]))
 
     def show_instruction(self, insn_addr, centering=False, use_block_pos=False):
