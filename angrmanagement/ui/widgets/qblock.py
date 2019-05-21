@@ -162,14 +162,14 @@ class QBlock(QGraphicsItem):
                 label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, mode=self.mode)
                 self.objects.append(label)
                 self.addr_to_labels[obj.addr] = label
-            elif isinstance(obj, PhiVariable):
-                if not isinstance(obj.variable, SimRegisterVariable):
-                    phivariable = QPhiVariable(self.workspace, self.disasm_view, obj, self._config)
-                    self.objects.append(phivariable)
-            elif isinstance(obj, Variables):
-                for var in obj.variables:
-                    variable = QVariable(self.workspace, self.disasm_view, var, self._config)
-                    self.objects.append(variable)
+            # elif isinstance(obj, PhiVariable):
+            #     if not isinstance(obj.variable, SimRegisterVariable):
+            #         phivariable = QPhiVariable(self.workspace, self.disasm_view, obj, self._config)
+            #         self.objects.append(phivariable)
+            # elif isinstance(obj, Variables):
+            #     for var in obj.variables:
+            #         variable = QVariable(self.workspace, self.disasm_view, var, self._config)
+            #         self.objects.append(variable)
         self.layout_widgets()
 
     def layout_widgets(self):
@@ -188,22 +188,12 @@ class QBlock(QGraphicsItem):
 class QGraphBlock(QBlock):
     MINIMUM_DETAIL_LEVEL = 0.3
 
+    def create_children(self):
+
+
     @property
     def mode(self):
         return 'graph'
-
-    def layout_widgets(self):
-        y_offset = self.TOP_PADDING
-
-        for obj in self.objects:
-            y_offset += self.SPACING
-
-            obj.x = self.GRAPH_LEFT_PADDING
-            obj.y = y_offset
-            if hasattr(obj, '_layout_operands'):
-                obj._layout_operands()
-
-            y_offset += obj.height
 
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
@@ -227,11 +217,18 @@ class QGraphBlock(QBlock):
         # if we are two far zoomed out, do not draw the text
         if should_omit_text:
             return
+        super().paint(painter, option, widget)
+        for obj in self.objects:
+            obj.hide()
 
-        self.layout_widgets()
+        y_offset = self.TOP_PADDING
 
         for obj in self.objects:
-            obj.paint(painter)
+            y_offset += self.SPACING
+
+            obj.setPos(self.GRAPH_LEFT_PADDING, y_offset)
+
+            y_offset += obj.boundingRect().height()
 
     def _calculate_size(self):
         height = len(self.objects) * self._config.disasm_font_height + \

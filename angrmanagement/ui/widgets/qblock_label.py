@@ -1,11 +1,12 @@
 
+from PySide2.QtWidgets import QGraphicsItem, QGraphicsTextItem
 from PySide2.QtGui import QPainter
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, QRectF
 
 from .qgraph_object import QGraphObject
 
 
-class QBlockLabel(QGraphObject):
+class QBlockLabel(QGraphicsItem):
 
     LINEAR_LABEL_OFFSET = 10
 
@@ -18,6 +19,10 @@ class QBlockLabel(QGraphObject):
 
         self._config = config
         self._disasm_view = disasm_view
+
+        child = QGraphicsTextItem(self.text, parent=self)
+        child.setPos(0, 0)
+        child.setDefaultTextColor(Qt.blue)
 
     @property
     def label(self):
@@ -43,17 +48,8 @@ class QBlockLabel(QGraphObject):
     def size(self):
         return self.width, self.height
 
-    def paint(self, painter):
-        """
-
-        :param QPainter painter:
-        :return:
-        """
-
-        if self.mode == "linear":
-            self._paint_linear(painter)
-        else:
-            self._paint_graph(painter)
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
+        pass
 
     def _paint_linear(self, painter):
 
@@ -84,3 +80,7 @@ class QBlockLabel(QGraphObject):
     def _update_size(self):
         self._width = self._config.disasm_font_width * len(self.text)
         self._height = self._config.disasm_font_height
+
+    def boundingRect(self):
+        self._update_size()
+        return QRectF(0, 0, self._width, self._height)

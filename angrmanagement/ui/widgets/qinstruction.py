@@ -1,6 +1,6 @@
 import logging
 
-from PySide2.QtWidgets import QLabel, QHBoxLayout, QSizePolicy
+from PySide2.QtWidgets import QLabel, QHBoxLayout, QSizePolicy, QGraphicsItem
 from PySide2.QtGui import QCursor, QPainter, QColor
 from PySide2.QtCore import Qt, SIGNAL
 
@@ -14,7 +14,7 @@ _l = logging.getLogger(__name__)
 _l.setLevel(logging.DEBUG)
 
 
-class QInstruction(QGraphObject):
+class QInstruction(QGraphicsItem):
 
     GRAPH_ADDR_SPACING = 20
     GRAPH_MNEMONIC_SPACING = 10
@@ -56,17 +56,25 @@ class QInstruction(QGraphObject):
         #self.setContextMenuPolicy(Qt.CustomContextMenu)
         #self.connect(self, SIGNAL('customContextMenuRequested(QPoint)'), self._on_context_menu)
 
-    def paint(self, painter):
-        """
+    # def paint(self, painter):
+    #     """
 
-        :param QPainter painter:
-        :return:
-        """
+    #     :param QPainter painter:
+    #     :return:
+    #     """
 
-        if self.mode == "linear":
-            self._paint_linear(painter)
-        else:
-            self._paint_graph(painter)
+    #     if self.mode == "linear":
+    #         self._paint_linear(painter)
+    #     else:
+    #         self._paint_graph(painter)
+
+    @property
+    def height(self):
+        return self.boundingRect().height()
+
+    @property
+    def width(self):
+        return self.boundingRect().width()
 
     def refresh(self):
         super(QInstruction, self).refresh()
@@ -231,6 +239,51 @@ class QInstruction(QGraphObject):
             painter.setBrush(QColor(r, g, b))
             painter.drawRect(self.x, self.y, self.width, self.height)
 
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
+        self._layout_operands()
+
+        self._paint_highlight(painter)
+
+        x, y = 0, 0
+
+        # address
+        if self.disasm_view.show_address:
+            painter.setPen(Qt.black)
+            painter.drawText(x, y + self._config.disasm_font_ascent, self._addr)
+
+            x += self._addr_width + self.GRAPH_ADDR_SPACING
+
+        # mnemonic
+        painter.setPen(QColor(0, 0, 0x80))
+        painter.drawText(x, y + self._config.disasm_font_ascent, self._mnemonic)
+
+        x += self._mnemonic_width + self.GRAPH_MNEMONIC_SPACING
+
+        # operands
+        for i, op in enumerate(self._operands):
+            op.x = x
+            op.y = y
+            op.paint(painter)
+
+            x += op.width
+
+            if i != len(self._operands) - 1:
+                # draw the comma
+                painter.drawText(x, y + self._config.disasm_font_ascent, ",")
+                x += self._config.disasm_font_width * 1
+
+            x += self.GRAPH_OPERAND_SPACING
+
+        # comment or string - comments have precedence
+        if self._comment is not None:
+            x += self.GRAPH_COMMENT_STRING_SPACING
+            painter.setPen(Qt.blue)
+            painter.drawText(x, y + self._config.disasm_font_ascent, self._comment)
+        elif self._string is not None:
+            x += self.GRAPH_COMMENT_STRING_SPACING
+            painter.setPen(Qt.gray)
+            painter.drawText(x, y + self._config.disasm_font_ascent, self._string)
+
     def _paint_graph(self, painter):
         self._layout_operands()
 
@@ -384,3 +437,8 @@ class QInstruction(QGraphObject):
             x += self.GRAPH_COMMENT_STRING_SPACING
             painter.setPen(Qt.gray)
             painter.drawText(x, self.y + self._config.disasm_font_ascent, self._string)
+
+    def boundingRect(self):
+        self._layout_operands()
+        self._update_size()
+        return self.RectF(0, 0, self._width, self._height)
