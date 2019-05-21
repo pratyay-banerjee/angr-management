@@ -1,3 +1,5 @@
+import logging
+
 from PySide2.QtWidgets import QLabel, QHBoxLayout, QSizePolicy
 from PySide2.QtGui import QCursor, QPainter, QColor
 from PySide2.QtCore import Qt, SIGNAL
@@ -7,6 +9,9 @@ from angr.analyses.disassembly import Value
 from .qgraph_object import QGraphObject
 from .qoperand import QOperand
 from ...utils import should_display_string_label, get_string_for_display, get_comment_for_display
+
+_l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
 
 class QInstruction(QGraphObject):
@@ -46,8 +51,6 @@ class QInstruction(QGraphObject):
         self._comment = None
         self._comment_width = None
 
-        self._is_initialized = False
-
         self._init_widgets()
 
         #self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -71,7 +74,9 @@ class QInstruction(QGraphObject):
         for operand in self._operands:
             operand.refresh()
 
-        self._update_size()
+        #self._update_size()
+        self._init_widgets()
+        self._layout_operands()
 
     def select(self):
         if not self.selected:
@@ -118,7 +123,13 @@ class QInstruction(QGraphObject):
                     op.on_mouse_pressed(button, pos)
                     return
 
-            self.disasm_view.toggle_instruction_selection(self.insn.addr)
+            _l.debug('detected mouse press')
+            if self.workspace.instance.selected_addr != self.insn.addr:
+                _l.debug('Click detected! Setting...')
+                self.workspace.instance.selected_addr = self.insn.addr
+            else:
+                _l.debug('Click detected! Unsetting...')
+                self.workspace.instance.selected_addr = None
         elif button == Qt.RightButton:
             # right click
             # display the context menu
@@ -148,21 +159,19 @@ class QInstruction(QGraphObject):
 
         # First we'll check for customizations
         if self.disasm_view.insn_backcolor_callback:
-            r, g, b = self.disasm_view.insn_backcolor_callback(self.insn.addr, self.selected)
+            is_selected = int(self._addr, 16) == self.workspace.instance.selected_addr
+            r, g, b = self.disasm_view.insn_backcolor_callback(self.insn.addr, is_selected)
 
         # Fallback to defaults if we get Nones from the callback
         if r is None or g is None or b is None:
-            if self.selected:
+            if int(self._addr, 16) == self.workspace.instance.selected_addr:
                 r, g, b = 0xef, 0xbf, 0xba
 
         return r, g, b
 
-    def _lazy_paint(self):
-        if not self._is_initialized:
-            self._init_widgets()
-            self._is_initialized = True
-
     def _init_widgets(self):
+
+        self._operands.clear()
 
         self._addr = "%08x" % self.insn.addr
         self._addr_width = self._config.disasm_font_width * len(self._addr)
@@ -223,7 +232,7 @@ class QInstruction(QGraphObject):
             painter.drawRect(self.x, self.y, self.width, self.height)
 
     def _paint_graph(self, painter):
-        self._lazy_paint()
+        self._layout_operands()
 
         self._paint_highlight(painter)
 
@@ -267,9 +276,69 @@ class QInstruction(QGraphObject):
             painter.setPen(Qt.gray)
             painter.drawText(x, self.y + self._config.disasm_font_ascent, self._string)
 
+    def _layout_operands(self):
+        if self.mode == 'linear':
+            x = self.x
+
+            # address
+            if self.disasm_view.show_address:
+                x += self._addr_width + self.LINEAR_INSTRUCTION_OFFSET
+
+            # mnemonic
+
+            x += self._mnemonic_width + self.GRAPH_MNEMONIC_SPACING
+
+            # operands
+            for i, op in enumerate(self._operands):
+                op.x = x
+                op.y = self.y
+
+                x += op.width
+
+                if i != len(self._operands) - 1:
+                    # draw the comma
+                    x += self._config.disasm_font_width * 1
+
+                x += self.GRAPH_OPERAND_SPACING
+
+            # comment or string - comments have precedence
+            if self._comment is not None:
+                x += self.GRAPH_COMMENT_STRING_SPACING
+            elif self._string is not None:
+                x += self.GRAPH_COMMENT_STRING_SPACING
+        else:
+            x = self.x
+
+            # address
+            if self.disasm_view.show_address:
+                x += self._addr_width + self.GRAPH_ADDR_SPACING
+
+            # mnemonic
+
+            x += self._mnemonic_width + self.GRAPH_MNEMONIC_SPACING
+
+            # operands
+            for i, op in enumerate(self._operands):
+                op.x = x
+                op.y = self.y
+
+                x += op.width
+
+                if i != len(self._operands) - 1:
+                    # draw the comma
+                    x += self._config.disasm_font_width * 1
+
+                x += self.GRAPH_OPERAND_SPACING
+
+            # comment or string - comments have precedence
+            if self._comment is not None:
+                x += self.GRAPH_COMMENT_STRING_SPACING
+            elif self._string is not None:
+                x += self.GRAPH_COMMENT_STRING_SPACING
+
     def _paint_linear(self, painter):
 
-        self._lazy_paint()
+        self._layout_operands()
 
         self._paint_highlight(painter)
 
@@ -304,7 +373,6 @@ class QInstruction(QGraphObject):
                 # draw the comma
                 painter.drawText(x, self.y + self._config.disasm_font_ascent, ",")
                 x += self._config.disasm_font_width * 1
-
             x += self.GRAPH_OPERAND_SPACING
 
         # comment or string - comments have precedence

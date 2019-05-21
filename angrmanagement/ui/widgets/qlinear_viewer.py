@@ -38,6 +38,13 @@ class QLinearDisassembly(QSaveableGraphicsView):
         self._disasms = { }
         self._add_items()
 
+    def redraw(self):
+        self.scene().update(self.sceneRect())
+
+    def reload(self):
+        self._add_items()
+
+
     @property
     def cfg(self):
         return self.workspace.instance.cfg

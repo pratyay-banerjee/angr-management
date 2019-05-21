@@ -1,6 +1,7 @@
+import logging
 
 from PySide2.QtGui import QPainter, QLinearGradient, QColor, QBrush, QPen
-from PySide2.QtCore import QPointF, Qt, QRectF
+from PySide2.QtCore import QPointF, Qt, QRectF, Slot
 from PySide2.QtWidgets import QGraphicsItem
 
 from angr.analyses.disassembly import Instruction
@@ -17,9 +18,9 @@ from .qblock_label import QBlockLabel
 from .qphivariable import QPhiVariable
 from .qvariable import QVariable
 
-import logging
 
 _l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
 class QBlock(QGraphicsItem):
     TOP_PADDING = 0
@@ -41,6 +42,9 @@ class QBlock(QGraphicsItem):
         self.addr = addr
         self.cfg_nodes = cfg_nodes
         self.out_branches = out_branches
+
+        self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
+        self.workspace.instance.selected_operand_updated.connect(self.refresh)
 
         self._config = Conf
 
@@ -72,13 +76,14 @@ class QBlock(QGraphicsItem):
     # Public methods
     #
 
+    @Slot(int)
+    def refresh_if_contains_addr(self, addr1, addr2):
+        if addr1 in self.addr_to_insns or addr2 in self.addr_to_insns:
+            self.refresh()
+
     def refresh(self):
-        super(QBlock, self).refresh()
-
-        for obj in self.objects:
-            obj.refresh()
-
-        self._update_size()
+        self._init_widgets()
+        self.update()
 
     def update_label(self, label_addr):
         label = self.addr_to_labels.get(label_addr, None)
@@ -104,12 +109,20 @@ class QBlock(QGraphicsItem):
     #
 
     def mousePressEvent(self, event):
+        _l.debug('QBlock got a mouse press')
         button = event.button()
         pos = event.pos()
         if button == Qt.LeftButton:
+            event.accept()
             for obj in self.objects:
                 if obj.y <= pos.y() < obj.y + obj.height:
                     obj.on_mouse_pressed(button, pos)
+                    break
+            else:
+                _l.debug('Deactivating selected addr and operand')
+                self.workspace.instance.selected_addr = None
+                self.workspace.instance.selected_operand = None
+
 
     def mouseReleaseEvent(self, event):
         button = event.button()
@@ -120,13 +133,13 @@ class QBlock(QGraphicsItem):
                 if obj.y <= pos.y() < obj.y + obj.height:
                     obj.on_mouse_released(button, pos)
 
-    def mouseDoubleClickEvent(self, event):
-        button = event.button()
-        pos = event.pos()
-        if button == Qt.LeftButton:
-            for obj in self.objects:
-                if obj.y <= pos.y() < obj.y + obj.height:
-                    obj.on_mouse_doubleclicked(button, pos)
+    # def mouseDoubleClickEvent(self, event):
+    #     button = event.button()
+    #     pos = event.pos()
+    #     if button == Qt.LeftButton:
+    #         for obj in self.objects:
+    #             if obj.y <= pos.y() < obj.y + obj.height:
+    #                 obj.on_mouse_doubleclicked(button, pos)
 
     #
     # Initialization
@@ -134,6 +147,7 @@ class QBlock(QGraphicsItem):
 
     def _init_widgets(self):
 
+        self.objects.clear()
         block_objects = get_block_objects(self.disasm, self.cfg_nodes, self.func_addr)
 
         for obj in block_objects:
@@ -156,6 +170,10 @@ class QBlock(QGraphicsItem):
                 for var in obj.variables:
                     variable = QVariable(self.workspace, self.disasm_view, var, self._config)
                     self.objects.append(variable)
+        self.layout_widgets()
+
+    def layout_widgets(self):
+        raise NotImplementedError
 
     #
     # Private methods
@@ -174,9 +192,23 @@ class QGraphBlock(QBlock):
     def mode(self):
         return 'graph'
 
+    def layout_widgets(self):
+        y_offset = self.TOP_PADDING
+
+        for obj in self.objects:
+            y_offset += self.SPACING
+
+            obj.x = self.GRAPH_LEFT_PADDING
+            obj.y = y_offset
+            if hasattr(obj, '_layout_operands'):
+                obj._layout_operands()
+
+            y_offset += obj.height
+
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         should_omit_text = lod < QGraphBlock.MINIMUM_DETAIL_LEVEL
+
 
         painter.setRenderHints(
                 QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
@@ -196,16 +228,10 @@ class QGraphBlock(QBlock):
         if should_omit_text:
             return
 
-        y_offset = self.TOP_PADDING
+        self.layout_widgets()
 
         for obj in self.objects:
-            y_offset += self.SPACING
-
-            obj.x = self.GRAPH_LEFT_PADDING
-            obj.y = y_offset
             obj.paint(painter)
-
-            y_offset += obj.height
 
     def _calculate_size(self):
         height = len(self.objects) * self._config.disasm_font_height + \
@@ -227,8 +253,7 @@ class QLinearBlock(QBlock):
     def mode(self):
         return 'linear'
 
-    def paint(self, painter, option, widget): #pylint: disable=unused-argument
-        _l.debug('Painting linear block')
+    def layout_widgets(self):
         y_offset = 0
 
         for obj in self.objects:
@@ -236,9 +261,18 @@ class QLinearBlock(QBlock):
 
             obj.x = 0
             obj.y = y_offset
-            obj.paint(painter)
+            if hasattr(obj, '_layout_operands'):
+                obj._layout_operands()
 
             y_offset += obj.height
+
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
+        _l.debug('Painting linear block')
+        y_offset = 0
+
+        self.layout_widgets()
+        for obj in self.objects:
+            obj.paint(painter)
 
     def _calculate_size(self):
         height = len(self.objects) * self._config.disasm_font_height + \

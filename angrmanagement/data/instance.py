@@ -93,6 +93,8 @@ class ObjectContainer(EventSentinel):
 class Instance(QObject):
     cfg_updated = Signal()
     cfb_updated = Signal()
+    selected_addr_updated = Signal((int, int))
+    selected_operand_updated = Signal(object)
 
     def __init__(self, project=None):
         super().__init__()
@@ -110,15 +112,40 @@ class Instance(QObject):
 
         self._cfg = None
         self._cfb = None
+        self._disassembly = {}
 
         self.database_path = None
 
         # The image name when loading image
         self.img_name = None
 
+        self._selected_addr = None
+        self._selected_operand = None
+
     #
     # Properties
     #
+
+    @property
+    def selected_addr(self):
+        return self._selected_addr
+
+    @selected_addr.setter
+    def selected_addr(self, v):
+        if self._selected_addr != v:
+            old_v = self._selected_addr
+            self._selected_addr = v
+            self.selected_addr_updated.emit(old_v, v)
+
+    @property
+    def selected_operand(self):
+        return self._selected_operand
+
+    @selected_operand.setter
+    def selected_operand(self, v):
+        if self._selected_operand != v:
+            self._selected_operand = v
+            self.selected_operand_updated.emit(v)
 
     @property
     def cfg(self):

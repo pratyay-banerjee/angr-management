@@ -469,8 +469,8 @@ class DisassemblyView(BaseView):
         if self._flow_graph.isVisible():
             if self._flow_graph.function_graph is None or self._flow_graph.function_graph.function is not the_func:
                 # clear existing selected instructions and operands
-                self._flow_graph.selected_insns.clear()
-                self._flow_graph.selected_operands.clear()
+                self.workspace.instance.selected_insn = None
+                self.workspace.instance.selected_operand = None
                 # set function graph of a new function
                 self._flow_graph.function_graph = FunctionGraph(function=the_func)
             else:

@@ -79,7 +79,7 @@ class QOperand(QGraphObject):
             painter.drawRect(self.x, self.y, self.width, self.height)
         else:
             # should we highlight ourselves?
-            if self.infodock.should_highlight_operand(self):
+            if self.infodock.should_highlight_operand(self.workspace.instance.selected_operand, self):
                 painter.setPen(QColor(0x7f, 0xf5, 0))
                 painter.setBrush(QColor(0x7f, 0xf5, 0))
                 painter.drawRect(self.x, self.y, self.width, self.height)
@@ -154,7 +154,10 @@ class QOperand(QGraphObject):
 
     def on_mouse_pressed(self, button, pos):
         if button == Qt.LeftButton:
-            self.disasm_view.toggle_operand_selection(self.insn.addr, self.operand_index)
+            if not self.equals_for_highlighting_purposes(self.workspace.instance.selected_operand):
+                self.workspace.instance.selected_operand = self
+            else:
+                self.workspace.instance.selected_operand = None
 
     def on_mouse_doubleclicked(self, button, pos):
         if button == Qt.LeftButton:
@@ -385,3 +388,21 @@ class QOperand(QGraphObject):
                 return True
 
         return False
+
+    def equals_for_highlighting_purposes(self, other):
+        if other is None:
+            return False
+        highlight_mode = self.infodock.highlight_mode
+
+        if highlight_mode == OperandHighlightMode.SAME_TEXT or self.variable is None:
+            # when there is no related variable, we highlight as long as they have the same text
+            return other.text == self.text
+        elif highlight_mode == OperandHighlightMode.SAME_IDENT:
+            if self.variable is not None and other.variable is not None:
+                return self.variable.ident == other.variable.ident
+
+        return False
+
+class OperandHighlightMode(object):
+    SAME_IDENT = 0
+    SAME_TEXT = 1

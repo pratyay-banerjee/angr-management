@@ -5,35 +5,22 @@ from PySide2.QtCore import QPointF, QRectF, Qt, QPoint, QSize, QMarginsF, QEvent
 from PySide2.QtGui import QPainter, QBrush, QColor, QMouseEvent, QResizeEvent, QPen, QImage
 from PySide2.QtWidgets import QApplication
 
-from ...config import Conf
 from ...utils import get_out_branches
 from ...utils.graph_layouter import GraphLayouter
 from ...utils.cfg import categorize_edges
-from ...utils.edge import EdgeSort
 from .qblock import QGraphBlock
 from .qgraph_arrow import QGraphArrow
-from .qgraph import QZoomableDraggableGraphicsView, QAssemblyLevelGraph
+from .qgraph import QZoomableDraggableGraphicsView
 
 _l = logging.getLogger(__name__)
 _l.setLevel(logging.DEBUG)
 
-def timeit(f):
-    @wraps(f)
-    def decorator(*args, **kwargs):
-        import time
-        start = time.time()
-        r = f(*args, **kwargs)
-        elapsed = time.time() - start
-        print("%s takes %f sec." % (f.__name__, elapsed))
-
-        return r
-    return decorator
-
-
-class QDisasmGraph(QAssemblyLevelGraph):
+class QDisasmGraph(QZoomableDraggableGraphicsView):
 
     def __init__(self, workspace, parent=None):
-        super().__init__(workspace, parent=parent)
+        super().__init__(parent=parent)
+
+        self.workspace = workspace
 
         self.disassembly_view = parent
         self.disasm = None
@@ -77,28 +64,27 @@ class QDisasmGraph(QAssemblyLevelGraph):
     # Public methods
     #
 
+    def redraw(self):
+        self.scene().update(self.sceneRect())
+
     def reload(self):
         _l.debug('Reloading disassembly graph')
         self._reset_scene()
-        if self._function_graph.function not in DISASM_CACHE:
-            DISASM_CACHE[self._function_graph.function] = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
-        self.disasm = DISASM_CACHE[self._function_graph.function]
+        self.disasm = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
         self.workspace.view_manager.first_view_in_category('console').push_namespace({
             'disasm': self.disasm,
         })
 
-        self._clear_insn_addr_block_mapping()
         self.blocks.clear()
 
         supergraph = self._function_graph.supergraph
         for n in supergraph.nodes():
             block = QGraphBlock(self.workspace, self._function_graph.function.addr, self.disassembly_view, self.disasm,
                            self.infodock, n.addr, n.cfg_nodes, get_out_branches(n))
+            if n.addr == self._function_graph.function.addr:
+                self.entry_block = block
             self.scene().addItem(block)
             self.blocks.append(block)
-
-            for insn_addr in block.addr_to_insns.keys():
-                self._add_insn_addr_block_mapping(insn_addr, block)
 
         self.request_relayout()
 
@@ -118,8 +104,7 @@ class QDisasmGraph(QAssemblyLevelGraph):
         self.request_relayout()
 
     def _initial_position(self):
-        entry_block = self._insn_addr_to_block[self._function_graph.function.addr]
-        entry_block_rect = entry_block.mapRectToScene(entry_block.boundingRect())
+        entry_block_rect = self.entry_block.mapRectToScene(self.entry_block.boundingRect())
         viewport_height = self.viewport().rect().height()
         min_rect = self.scene().itemsBoundingRect()
         if min_rect.height() < (viewport_height // 1.5):
@@ -152,6 +137,11 @@ class QDisasmGraph(QAssemblyLevelGraph):
             self.disassembly_view.jump_back()
         else:
             super().mousePressEvent(event)
+
+    def on_background_click(self):
+        _l.debug('Clearing because of background click')
+        self.workspace.instance.selected_addr = None
+        self.workspace.instance.selected_operand = None
 
     def keyPressEvent(self, event):
 

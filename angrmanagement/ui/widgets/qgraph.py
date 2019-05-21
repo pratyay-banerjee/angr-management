@@ -1,6 +1,6 @@
 import logging
 
-from PySide2.QtWidgets import QGraphicsScene, QGraphicsView, QStyleOptionGraphicsItem
+from PySide2.QtWidgets import QGraphicsScene, QGraphicsView, QStyleOptionGraphicsItem, QApplication, QGraphicsSceneMouseEvent
 from PySide2.QtGui import QPainter, QKeyEvent, QMouseEvent, QImage, QVector2D
 from PySide2.QtCore import Qt, QSize, Signal, QPoint, QEvent, QRectF, QMarginsF, QObject
 
@@ -27,12 +27,29 @@ class QSaveableGraphicsView(QGraphicsView):
         painter.setRenderHints(
                 QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
 
+        # draw the image
         self.scene().setSceneRect(imgRect)
         self.scene().render(painter)
         image.save(path)
+
+        # cleanup
         painter.end()
+
+        # restore the old scene rect
         self.scene().setSceneRect(oldRect)
 
+class CustomizableGraphicsScene(QGraphicsScene):
+    def __init__(self, *args, **kwargs):
+        self._onMousePress = kwargs.pop('onMousePress', None)
+        super().__init__(*args, **kwargs)
+
+    def mousePressEvent(self, event):
+        if self._onMousePress is not None and not self._onMousePress(event):
+            super().mousePressEvent(event)
+
+def test_func(event):
+    if event.button() == Qt.LeftButton:
+        print('YO GOT A CLICK DAWG')
 
 class QZoomableDraggableGraphicsView(QSaveableGraphicsView):
 
@@ -124,6 +141,7 @@ class QZoomableDraggableGraphicsView(QSaveableGraphicsView):
             self._is_dragging = False
 
             self._save_last_coords(event)
+            event.accept()
 
     def mouseMoveEvent(self, event):
         """
@@ -147,6 +165,39 @@ class QZoomableDraggableGraphicsView(QSaveableGraphicsView):
             self._save_last_coords(event)
             event.accept()
 
+    def dispatchMouseEventToScene(self, event):
+        if event.type() == QEvent.MouseButtonPress:
+            newtype = QEvent.GraphicsSceneMousePress
+        elif event.type() == QEvent.MouseButtonRelease:
+            newtype = QEvent.GraphicsSceneMouseRelease
+        else:
+            raise ValueError('Unknown event type {}'.format(event.type()))
+
+        # pulled from QGraphicsView::mousePressEvent in the qt codebase:
+        mouseEvent = QGraphicsSceneMouseEvent(newtype)
+        mousePressViewPoint = event.pos()
+        mousePressScenePoint = self.mapToScene(mousePressViewPoint)
+        mousePressScreenPoint = event.globalPos()
+        lastMouseMoveScenePoint = mousePressScenePoint
+        lastMouseMoveScreenPoint = mousePressScreenPoint
+        mousePressButton = event.button()
+
+        #mouseEvent.setWidget(self.viewport()) # TODO figure out how to do this in python, or if it's really necessary
+        mouseEvent.setButtonDownScenePos(mousePressButton, mousePressScenePoint)
+        mouseEvent.setButtonDownScreenPos(mousePressButton, mousePressScreenPoint)
+        mouseEvent.setScenePos(mousePressScenePoint)
+        mouseEvent.setScreenPos(mousePressScreenPoint)
+        mouseEvent.setLastScenePos(lastMouseMoveScenePoint)
+        mouseEvent.setLastScreenPos(lastMouseMoveScreenPoint)
+        mouseEvent.setButtons(event.buttons())
+        mouseEvent.setButton(event.button())
+        mouseEvent.setModifiers(event.modifiers())
+        mouseEvent.setSource(event.source())
+        mouseEvent.setFlags(event.flags())
+        mouseEvent.setAccepted(False)
+        QApplication.sendEvent(self.scene(), mouseEvent)
+        return mouseEvent
+
     def mouseReleaseEvent(self, event):
         """
 
@@ -165,148 +216,12 @@ class QZoomableDraggableGraphicsView(QSaveableGraphicsView):
                                      event.button(),
                                      event.buttons(),
                                      event.modifiers())
-                super().mousePressEvent(pressy)
-                super().mouseReleaseEvent(event)
+
+                pressEvent = self.dispatchMouseEventToScene(pressy)
+                releaseEvent = self.dispatchMouseEventToScene(event)
+                if not pressEvent.isAccepted():
+                    self.on_background_click()
+                    pressEvent.accept()
             self._is_mouse_pressed = False
             self._is_dragging = False
 
-
-class QAssemblyLevelGraph(QZoomableDraggableGraphicsView):
-    def __init__(self, workspace, parent=None):
-        super().__init__(parent=parent)
-        self.workspace = workspace
-        self._edge_paths = []
-        self.blocks = set()
-
-        self.selected_insns = ObjectContainer(set(), 'The currently selected instructions')
-        self.selected_operands = set()
-        self._insn_addr_to_block = {}
-
-
-    def request_relayout(self):
-        raise NotImplementedError()
-
-    def update_label(self, label_addr, is_renaming=False):
-        # if it's just a renaming, we simply update the text of the label
-        if is_renaming:
-            if label_addr in self._insn_addr_to_block:
-                block = self._insn_addr_to_block[label_addr]
-                block.update_label(label_addr)
-
-            else:
-                # umm not sure what's going wrong
-                _l.error('Label address %#x is not found in the current function.', label_addr)
-
-        else:
-            self.reload()
-
-    def update_comment(self, comment_addr, comment_text):
-        if comment_addr in self._insn_addr_to_block:
-            block = self._insn_addr_to_block[comment_addr]
-            insn = block.addr_to_insns[comment_addr]
-            if insn:
-                insn.set_comment(comment_text)
-        else:
-            # umm not sure what's going wrong
-            _l.error('Label address %#x is not found in the current function.', comment_addr)
-
-    def select_instruction(self, insn_addr, unique=True):
-        block = self._insn_addr_to_block.get(insn_addr, None)
-        if block is None:
-            # the instruction does not belong to the current function
-            return
-
-        if insn_addr not in self.selected_insns:
-            if unique:
-                # unselect existing ones
-                self.unselect_all_instructions()
-                self.selected_insns.add(insn_addr)
-            else:
-                self.selected_insns.add(insn_addr)
-
-            block.addr_to_insns[insn_addr].select()
-            block.update()
-
-        # Notify subscribers BEFORE we update the viewport so they can make any further changes
-        #self.selected_insns.am_event(graph=self, addr=insn_addr, block=block)
-        #self.viewport().update()
-        #self.reload()
-
-    def unselect_instruction(self, insn_addr):
-        block = self._insn_addr_to_block.get(insn_addr, None)
-        if block is None:
-            return
-
-        if insn_addr in self.selected_insns:
-            self.selected_insns.remove(insn_addr)
-
-            block.addr_to_insns[insn_addr].unselect()
-        block.update()
-
-        #self.viewport().update()
-        #self.update()
-        _l.debug('Finished the reload')
-
-    def unselect_all_instructions(self):
-        for insn_addr in self.selected_insns.copy():
-            self.unselect_instruction(insn_addr)
-
-    def select_operand(self, insn_addr, operand_idx, unique=True):
-        block = self._insn_addr_to_block.get(insn_addr, None)
-        if block is None:
-            # the instruction does not belong to the current function
-            return
-
-        if (insn_addr, operand_idx) not in self.selected_operands:
-            if unique:
-                # unselect existing ones
-                self.unselect_all_operands()
-                self.selected_operands = { (insn_addr, operand_idx) }
-            else:
-                self.selected_operands.add((insn_addr, operand_idx))
-
-            block.addr_to_insns[insn_addr].select_operand(operand_idx)
-
-        self.scene().update(self.sceneRect())
-
-    def reload(self):
-        raise NotImplementedError
-
-    def unselect_operand(self, insn_addr, operand_idx):
-        block = self._insn_addr_to_block.get(insn_addr, None)
-        if block is None:
-            return
-
-        if (insn_addr, operand_idx) in self.selected_operands:
-            self.selected_operands.remove((insn_addr, operand_idx))
-
-            block.addr_to_insns[insn_addr].unselect_operand(operand_idx)
-
-        self.scene().update(self.sceneRect())
-
-    def unselect_all_operands(self):
-        for insn_addr, operand_idx in self.selected_operands.copy():
-            self.unselect_operand(insn_addr, operand_idx)
-
-    def show_selected(self):
-        if self.selected_insns:
-            addr = next(iter(self.selected_insns))
-            self.show_instruction(addr)
-
-    def show_instruction(self, insn_addr):
-        raise NotImplementedError
-
-    #
-    # Event handlers
-    #
-
-    #
-    # Private methods
-    #
-
-
-    def _clear_insn_addr_block_mapping(self):
-        self._insn_addr_to_block.clear()
-
-    def _add_insn_addr_block_mapping(self, insn_addr, block):
-        self._insn_addr_to_block[insn_addr] = block

@@ -5,18 +5,18 @@ from PySide2.QtWidgets import QGraphicsView
 from PySide2.QtCore import QPoint, Qt, QPointF, QRectF
 
 from ...utils.graph_layouter import GraphLayouter
-from .qgraph import QAssemblyLevelGraph, QZoomableDraggableGraphicsView
+from .qgraph import QZoomableDraggableGraphicsView
 
 l = logging.getLogger('ui.widgets.qpg_graph')
 
 
-class QSymExecGraph(QAssemblyLevelGraph):
+class QSymExecGraph(QZoomableDraggableGraphicsView):
 
     LEFT_PADDING = 2000
     TOP_PADDING = 2000
 
     def __init__(self, current_state, workspace, symexec_view, parent=None):
-        super(QSymExecGraph, self).__init__(workspace=workspace, parent=parent)
+        super(QSymExecGraph, self).__init__(parent=parent)
 
         self.state = current_state
         self._symexec_view = symexec_view
