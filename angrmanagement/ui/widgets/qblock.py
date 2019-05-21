@@ -1,6 +1,6 @@
 import logging
 
-from PySide2.QtGui import QPainter, QLinearGradient, QColor, QBrush, QPen
+from PySide2.QtGui import QPainter, QLinearGradient, QColor, QBrush, QPen, QPainterPath
 from PySide2.QtCore import QPointF, Qt, QRectF, Slot
 from PySide2.QtWidgets import QGraphicsItem
 
@@ -43,6 +43,8 @@ class QBlock(QGraphicsItem):
         self.cfg_nodes = cfg_nodes
         self.out_branches = out_branches
 
+        self._cachy = None
+
         self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
         self.workspace.instance.selected_operand_updated.connect(self.refresh)
 
@@ -53,8 +55,13 @@ class QBlock(QGraphicsItem):
         self.addr_to_labels = { }
 
         self._init_widgets()
+        self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
+
+        self._objects_are_hidden = False
 
         self._rect = None
+        self._path = QPainterPath()
+        self._path.addRect(0, 0, self.width, self.height)
 
     #
     # Properties
@@ -108,30 +115,30 @@ class QBlock(QGraphicsItem):
     # Event handlers
     #
 
-    def mousePressEvent(self, event):
-        _l.debug('QBlock got a mouse press')
-        button = event.button()
-        pos = event.pos()
-        if button == Qt.LeftButton:
-            event.accept()
-            for obj in self.objects:
-                if obj.y <= pos.y() < obj.y + obj.height:
-                    obj.on_mouse_pressed(button, pos)
-                    break
-            else:
-                _l.debug('Deactivating selected addr and operand')
-                self.workspace.instance.selected_addr = None
-                self.workspace.instance.selected_operand = None
+    # def mousePressEvent(self, event):
+    #     _l.debug('QBlock got a mouse press')
+    #     button = event.button()
+    #     pos = event.pos()
+    #     if button == Qt.LeftButton:
+    #         event.accept()
+    #         for obj in self.objects:
+    #             if obj.y <= pos.y() < obj.y + obj.height:
+    #                 obj.on_mouse_pressed(button, pos)
+    #                 break
+    #         else:
+    #             _l.debug('Deactivating selected addr and operand')
+    #             self.workspace.instance.selected_addr = None
+    #             self.workspace.instance.selected_operand = None
 
 
-    def mouseReleaseEvent(self, event):
-        button = event.button()
-        pos = event.pos()
-        if button == Qt.RightButton or button == Qt.LeftButton:
-            event.accept()
-            for obj in self.objects:
-                if obj.y <= pos.y() < obj.y + obj.height:
-                    obj.on_mouse_released(button, pos)
+    # def mouseReleaseEvent(self, event):
+    #     button = event.button()
+    #     pos = event.pos()
+    #     if button == Qt.RightButton or button == Qt.LeftButton:
+    #         event.accept()
+    #         for obj in self.objects:
+    #             if obj.y <= pos.y() < obj.y + obj.height:
+    #                 obj.on_mouse_released(button, pos)
 
     # def mouseDoubleClickEvent(self, event):
     #     button = event.button()
@@ -154,12 +161,12 @@ class QBlock(QGraphicsItem):
             if isinstance(obj, Instruction):
                 out_branch = get_out_branches_for_insn(self.out_branches, obj.addr)
                 insn = QInstruction(self.workspace, self.func_addr, self.disasm_view, self.disasm,
-                                    self.infodock, obj, out_branch, self._config, mode=self.mode)
+                                    self.infodock, obj, out_branch, self._config, mode=self.mode, parent=self)
                 self.objects.append(insn)
                 self.addr_to_insns[obj.addr] = insn
             elif isinstance(obj, Label):
                 # label
-                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, mode=self.mode)
+                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, mode=self.mode, parent=self)
                 self.objects.append(label)
                 self.addr_to_labels[obj.addr] = label
             # elif isinstance(obj, PhiVariable):
@@ -180,55 +187,50 @@ class QBlock(QGraphicsItem):
     #
 
     def boundingRect(self):
-        if self._rect is None:
-            self._rect = self._calculate_size()
-        assert self._rect is not None
-        return self._rect
+        if self._cachy is None:
+            self._cachy = self.childrenBoundingRect()
+        return self._cachy
 
 class QGraphBlock(QBlock):
     MINIMUM_DETAIL_LEVEL = 0.3
 
-    def create_children(self):
-
-
     @property
     def mode(self):
         return 'graph'
+
+    def layout_widgets(self):
+        x, y = 0, 0
+        for obj in self.objects:
+            obj.setPos(x, y)
+            y += obj.boundingRect().height()
 
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         lod = option.levelOfDetailFromTransform(painter.worldTransform())
         should_omit_text = lod < QGraphBlock.MINIMUM_DETAIL_LEVEL
 
 
-        painter.setRenderHints(
-                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+        if not should_omit_text:
+            painter.setRenderHints(
+                    QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
 
-        painter.setFont(Conf.code_font)
+        #painter.setFont(Conf.code_font)
         # background of the node
         if should_omit_text:
             painter.setBrush(QColor(0xda, 0xda, 0xda))
         else:
             painter.setBrush(QColor(0xfa, 0xfa, 0xfa))
         painter.setPen(QPen(QColor(0xf0, 0xf0, 0xf0), 1.5))
-        painter.drawRect(0, 0, self.width, self.height)
+        painter.drawPath(self._path)
+        #painter.drawRect(0, 0, self.width, self.height)
 
         # content
 
         # if we are two far zoomed out, do not draw the text
-        if should_omit_text:
-            return
-        super().paint(painter, option, widget)
-        for obj in self.objects:
-            obj.hide()
-
-        y_offset = self.TOP_PADDING
-
-        for obj in self.objects:
-            y_offset += self.SPACING
-
-            obj.setPos(self.GRAPH_LEFT_PADDING, y_offset)
-
-            y_offset += obj.boundingRect().height()
+        if self._objects_are_hidden != should_omit_text:
+            for obj in self.objects:
+                obj.setVisible(not should_omit_text)
+                obj.setEnabled(not should_omit_text)
+            self._objects_are_hidden = should_omit_text
 
     def _calculate_size(self):
         height = len(self.objects) * self._config.disasm_font_height + \

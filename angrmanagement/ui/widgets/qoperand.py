@@ -1,6 +1,6 @@
 import logging
 
-from PySide2.QtWidgets import QLabel, QHBoxLayout
+from PySide2.QtWidgets import QLabel, QHBoxLayout, QGraphicsItem, QGraphicsSimpleTextItem
 from PySide2.QtGui import QPainter, QColor
 from PySide2.QtCore import Qt
 
@@ -12,14 +12,14 @@ from .qgraph_object import QGraphObject
 l = logging.getLogger('ui.widgets.qoperand')
 
 
-class QOperand(QGraphObject):
+class QOperand(QGraphicsItem):
 
     BRANCH_TARGETS_SPACING = 5
     VARIABLE_IDENT_SPACING = 5
 
     def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, insn, operand, operand_index,
-                 is_branch_target, is_indirect_branch, branch_targets, config):
-        super(QOperand, self).__init__()
+                 is_branch_target, is_indirect_branch, branch_targets, config, parent=None):
+        super().__init__(parent=parent)
 
         self.workspace = workspace
         self.func_addr = func_addr
@@ -36,6 +36,8 @@ class QOperand(QGraphObject):
 
         # the variable involved
         self.variable = None
+
+        self._cachy = None
 
         self._config = config
 
@@ -62,68 +64,20 @@ class QOperand(QGraphObject):
     def text(self):
         return self._label
 
+    @property
+    def height(self):
+        return self.boundingRect().height()
+
+    @property
+    def width(self):
+        return self.boundingRect().width()
+
     #
     # Public methods
     #
 
-    def paint(self, painter):
-        """
-
-        :param QPainter painter:
-        :return:
-        """
-
-        if self.selected:
-            painter.setPen(QColor(0xc0, 0xbf, 0x40))
-            painter.setBrush(QColor(0xc0, 0xbf, 0x40))
-            painter.drawRect(self.x, self.y, self.width, self.height)
-        else:
-            # should we highlight ourselves?
-            if self.infodock.should_highlight_operand(self.workspace.instance.selected_operand, self):
-                painter.setPen(QColor(0x7f, 0xf5, 0))
-                painter.setBrush(QColor(0x7f, 0xf5, 0))
-                painter.drawRect(self.x, self.y, self.width, self.height)
-
-        x = self.x
-
-        if self._branch_target or self._branch_targets:
-            if self._is_target_func:
-                painter.setPen(Qt.blue)
-            else:
-                painter.setPen(Qt.red)
-        else:
-            if self.variable is not None:
-                # it has a variable
-                fallback = True
-                if self.infodock.induction_variable_analysis is not None:
-                    r = self.infodock.induction_variable_analysis.variables.get(self.variable.ident, None)
-                    if r is not None and r.expr.__class__.__name__ == "InductionExpr":
-                        painter.setPen(Qt.darkYellow)
-                        fallback = False
-
-                if fallback:
-                    painter.setPen(QColor(0xff, 0x14, 0x93))
-            else:
-                painter.setPen(QColor(0, 0, 0x80))
-        painter.drawText(x, self.y + self._config.disasm_font_ascent, self._label)
-
-        x += self._label_width
-
-        # draw additional branch targets
-        if self._branch_targets_text:
-            painter.setPen(Qt.darkYellow)
-            x += self.BRANCH_TARGETS_SPACING
-            painter.drawText(x, self.y + self._config.disasm_font_ascent, self._branch_targets_text, )
-            x += self._branch_targets_text_width
-
-        if self.variable is not None and self.disasm_view.show_variable_identifier:
-            x += self.VARIABLE_IDENT_SPACING
-            painter.setPen(Qt.darkGreen)
-            painter.drawText(x, self.y + self._config.disasm_font_ascent, self._variable_ident)
-            x += self._variable_ident_width
-
-        # restores the color
-        painter.setPen(QColor(0, 0, 0x80))
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
+        pass
 
     def refresh(self):
         super(QOperand, self).refresh()
@@ -152,17 +106,12 @@ class QOperand(QGraphObject):
     # Event handlers
     #
 
-    def on_mouse_pressed(self, button, pos):
-        if button == Qt.LeftButton:
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
             if not self.equals_for_highlighting_purposes(self.workspace.instance.selected_operand):
                 self.workspace.instance.selected_operand = self
             else:
                 self.workspace.instance.selected_operand = None
-
-    def on_mouse_doubleclicked(self, button, pos):
-        if button == Qt.LeftButton:
-            if self._branch_target is not None:
-                self.disasm_view.jump_to(self._branch_target, src_ins_addr=self.insn.addr)
 
     #
     # Private methods
@@ -299,15 +248,12 @@ class QOperand(QGraphObject):
         else:
             self._variable_ident_width = 0
 
-        self._update_size()
+        QGraphicsSimpleTextItem(self.text, parent=self).setPos(0, 0)
 
-    def _update_size(self):
-        self._width = self._label_width
-        if self.disasm_view.show_variable_identifier and self._variable_ident_width:
-            self._width += self.VARIABLE_IDENT_SPACING + self._variable_ident_width
-        if self._branch_targets_text_width:
-            self._width += self.BRANCH_TARGETS_SPACING + self._branch_targets_text_width
-        self._height = self._config.disasm_font_height
+    def boundingRect(self):
+        if self._cachy is None:
+            self._cachy = self.childrenBoundingRect()
+        return self._cachy
 
     def _pick_variable(self, variable_and_offsets):
         """

@@ -38,12 +38,7 @@ class QPhiVariable(QGraphObject):
         self._subvar_idents = None
         self._subvar_ident_widths = None
 
-
         self._init_widgets()
-        dst_text = '<font color="Blue">{}</font>'.format(self._variable_name)
-        equals_text = '<font color="Black"> = </font>'
-        phi_text = '<font color="DarkGreen">{}</font>'
-        child = QGraphicsTextItem(u'<font color="Blue">{}</font> = \u0278({})'.format(self._variable_name)
 
     #
     # Public methods

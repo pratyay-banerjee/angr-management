@@ -69,8 +69,8 @@ class QZoomableDraggableGraphicsView(QSaveableGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self.setRenderHints(
-                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+        #self.setRenderHints(
+                #QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
 
     def _initial_position(self):
         raise NotImplementedError

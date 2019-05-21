@@ -1,6 +1,6 @@
 import logging
 
-from PySide2.QtWidgets import QLabel, QHBoxLayout, QSizePolicy, QGraphicsItem
+from PySide2.QtWidgets import QLabel, QHBoxLayout, QSizePolicy, QGraphicsItem, QGraphicsSimpleTextItem
 from PySide2.QtGui import QCursor, QPainter, QColor
 from PySide2.QtCore import Qt, SIGNAL
 
@@ -23,8 +23,8 @@ class QInstruction(QGraphicsItem):
 
     LINEAR_INSTRUCTION_OFFSET = 120
 
-    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, insn, out_branch, config, mode='graph'):
-        super(QInstruction, self).__init__()
+    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, insn, out_branch, config, mode='graph', parent=None):
+        super().__init__(parent=parent)
 
         # initialization
         self.workspace = workspace
@@ -51,11 +51,15 @@ class QInstruction(QGraphicsItem):
         self._comment = None
         self._comment_width = None
 
+        self._cachy = None
+
         self._init_widgets()
 
         #self.setContextMenuPolicy(Qt.CustomContextMenu)
         #self.connect(self, SIGNAL('customContextMenuRequested(QPoint)'), self._on_context_menu)
 
+    def paint(self, painter, option, widget):
+        pass
     # def paint(self, painter):
     #     """
 
@@ -121,41 +125,41 @@ class QInstruction(QGraphicsItem):
     # Event handlers
     #
 
-    def on_mouse_pressed(self, button, pos):
-        if button == Qt.LeftButton:
-            # left click
+    # def on_mouse_pressed(self, button, pos):
+    #     if button == Qt.LeftButton:
+    #         # left click
 
-            # is it on one of the operands?
-            for op in self._operands:
-                if op.x <= pos.x() < op.x + op.width:
-                    op.on_mouse_pressed(button, pos)
-                    return
+    #         # is it on one of the operands?
+    #         for op in self._operands:
+    #             if op.x <= pos.x() < op.x + op.width:
+    #                 op.on_mouse_pressed(button, pos)
+    #                 return
 
-            _l.debug('detected mouse press')
-            if self.workspace.instance.selected_addr != self.insn.addr:
-                _l.debug('Click detected! Setting...')
-                self.workspace.instance.selected_addr = self.insn.addr
-            else:
-                _l.debug('Click detected! Unsetting...')
-                self.workspace.instance.selected_addr = None
-        elif button == Qt.RightButton:
-            # right click
-            # display the context menu
-            self.disasm_view.instruction_context_menu(self.insn, QCursor.pos())
+    #         _l.debug('detected mouse press')
+    #         if self.workspace.instance.selected_addr != self.insn.addr:
+    #             _l.debug('Click detected! Setting...')
+    #             self.workspace.instance.selected_addr = self.insn.addr
+    #         else:
+    #             _l.debug('Click detected! Unsetting...')
+    #             self.workspace.instance.selected_addr = None
+    #     elif button == Qt.RightButton:
+    #         # right click
+    #         # display the context menu
+    #         self.disasm_view.instruction_context_menu(self.insn, QCursor.pos())
 
-    def on_mouse_released(self, button, pos):
-        pass
+    # def on_mouse_released(self, button, pos):
+    #     pass
 
-    def on_mouse_doubleclicked(self, button, pos):
+    # def on_mouse_doubleclicked(self, button, pos):
 
-        if button == Qt.LeftButton:
-            # left double click
+    #     if button == Qt.LeftButton:
+    #         # left double click
 
-            # is it on one of the operands?
-            for op in self._operands:
-                if op.x <= pos.x() < op.x + op.width:
-                    op.on_mouse_doubleclicked(button, pos)
-                    return
+    #         # is it on one of the operands?
+    #         for op in self._operands:
+    #             if op.x <= pos.x() < op.x + op.width:
+    #                 op.on_mouse_doubleclicked(button, pos)
+    #                 return
 
     #
     # Private methods
@@ -198,8 +202,8 @@ class QInstruction(QGraphicsItem):
                     if len(operand.children) == 1 and type(operand.children[0]) is Value:
                         branch_targets = (operand.children[0].val,)
             qoperand = QOperand(self.workspace, self.func_addr, self.disasm_view, self.disasm, self.infodock,
-                               self.insn, operand, i, is_branch_target, is_indirect_branch, branch_targets, self._config
-                               )
+                               self.insn, operand, i, is_branch_target, is_indirect_branch, branch_targets, self._config,
+                               parent=self)
             self._operands.append(qoperand)
 
         if should_display_string_label(self.workspace.instance.cfg, self.insn.addr):
@@ -211,25 +215,14 @@ class QInstruction(QGraphicsItem):
         if self._comment is not None:
             self._comment_width = self._config.disasm_font_width * len(self._comment)
 
-        self._update_size()
+        self._mnemonic_item = QGraphicsSimpleTextItem(self._mnemonic, parent=self)
 
-    def _update_size(self):
-
-        self._height = self._config.disasm_font_height
-        self._width = 0
-
-        if self.disasm_view.show_address:
-            self._width += self._addr_width + self.GRAPH_ADDR_SPACING
-
-        self._width += self._mnemonic_width + self.GRAPH_MNEMONIC_SPACING + \
-                       sum([ op.width for op in self._operands ]) + \
-                       (len(self._operands) - 1) * (self._config.disasm_font_width + self.GRAPH_OPERAND_SPACING)
-
-        # we only display string if there's no comment
-        if self._comment is not None:
-            self._width += self.GRAPH_COMMENT_STRING_SPACING + self._comment_width
-        elif self._string is not None:
-            self._width += self.GRAPH_COMMENT_STRING_SPACING + self._string_width
+        x = 0
+        self._mnemonic_item.setPos(0, 0)
+        x += self._mnemonic_item.boundingRect().width()
+        for operand in self._operands:
+            operand.setPos(x, 0)
+            x += operand.boundingRect().width()
 
     def _paint_highlight(self, painter):
         r, g, b = self.insn_backcolor
@@ -238,51 +231,6 @@ class QInstruction(QGraphicsItem):
             painter.setPen(QColor(r, g, b))
             painter.setBrush(QColor(r, g, b))
             painter.drawRect(self.x, self.y, self.width, self.height)
-
-    def paint(self, painter, option, widget): #pylint: disable=unused-argument
-        self._layout_operands()
-
-        self._paint_highlight(painter)
-
-        x, y = 0, 0
-
-        # address
-        if self.disasm_view.show_address:
-            painter.setPen(Qt.black)
-            painter.drawText(x, y + self._config.disasm_font_ascent, self._addr)
-
-            x += self._addr_width + self.GRAPH_ADDR_SPACING
-
-        # mnemonic
-        painter.setPen(QColor(0, 0, 0x80))
-        painter.drawText(x, y + self._config.disasm_font_ascent, self._mnemonic)
-
-        x += self._mnemonic_width + self.GRAPH_MNEMONIC_SPACING
-
-        # operands
-        for i, op in enumerate(self._operands):
-            op.x = x
-            op.y = y
-            op.paint(painter)
-
-            x += op.width
-
-            if i != len(self._operands) - 1:
-                # draw the comma
-                painter.drawText(x, y + self._config.disasm_font_ascent, ",")
-                x += self._config.disasm_font_width * 1
-
-            x += self.GRAPH_OPERAND_SPACING
-
-        # comment or string - comments have precedence
-        if self._comment is not None:
-            x += self.GRAPH_COMMENT_STRING_SPACING
-            painter.setPen(Qt.blue)
-            painter.drawText(x, y + self._config.disasm_font_ascent, self._comment)
-        elif self._string is not None:
-            x += self.GRAPH_COMMENT_STRING_SPACING
-            painter.setPen(Qt.gray)
-            painter.drawText(x, y + self._config.disasm_font_ascent, self._string)
 
     def _paint_graph(self, painter):
         self._layout_operands()
@@ -439,6 +387,6 @@ class QInstruction(QGraphicsItem):
             painter.drawText(x, self.y + self._config.disasm_font_ascent, self._string)
 
     def boundingRect(self):
-        self._layout_operands()
-        self._update_size()
-        return self.RectF(0, 0, self._width, self._height)
+        if self._cachy is None:
+            self._cachy = self.childrenBoundingRect()
+        return self._cachy

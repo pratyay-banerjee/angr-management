@@ -10,8 +10,8 @@ class QBlockLabel(QGraphicsItem):
 
     LINEAR_LABEL_OFFSET = 10
 
-    def __init__(self, addr, text, config, disasm_view, mode='graph'):
-        super(QBlockLabel, self).__init__()
+    def __init__(self, addr, text, config, disasm_view, mode='graph', parent=None):
+        super().__init__(parent=parent)
 
         self.addr = addr
         self.text = text
@@ -35,15 +35,11 @@ class QBlockLabel(QGraphicsItem):
 
     @property
     def width(self):
-        if self._width is None:
-            self._update_size()
-        return self._width
+        return self.boundingRect().width()
 
     @property
     def height(self):
-        if self._height is None:
-            self._update_size()
-        return self._height
+        return self.boundingRect().height()
 
     def size(self):
         return self.width, self.height

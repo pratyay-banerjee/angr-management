@@ -1,9 +1,10 @@
 from functools import wraps
 import logging
+import cProfile
 
 from PySide2.QtCore import QPointF, QRectF, Qt, QPoint, QSize, QMarginsF, QEvent
 from PySide2.QtGui import QPainter, QBrush, QColor, QMouseEvent, QResizeEvent, QPen, QImage
-from PySide2.QtWidgets import QApplication
+from PySide2.QtWidgets import QApplication, QOpenGLWidget
 
 from ...utils import get_out_branches
 from ...utils.graph_layouter import GraphLayouter
@@ -68,6 +69,8 @@ class QDisasmGraph(QZoomableDraggableGraphicsView):
         self.scene().update(self.sceneRect())
 
     def reload(self):
+        #prof = cProfile.Profile()
+        #prof.enable()
         _l.debug('Reloading disassembly graph')
         self._reset_scene()
         self.disasm = self.workspace.instance.project.analyses.Disassembly(function=self._function_graph.function)
@@ -93,6 +96,8 @@ class QDisasmGraph(QZoomableDraggableGraphicsView):
 
         # show the graph
         self.show()
+        #prof.disable()
+        #prof.dump_stats('out.log')
 
     def refresh(self):
         if not self.blocks:

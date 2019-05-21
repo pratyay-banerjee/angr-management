@@ -14,6 +14,7 @@ from .qunknown_block import QUnknownBlock
 from .qgraph import QSaveableGraphicsView
 
 _l = logging.getLogger(__name__)
+_l.setLevel(logging.DEBUG)
 
 class QLinearDisassembly(QSaveableGraphicsView):
     OBJECT_PADDING = 0
@@ -26,8 +27,8 @@ class QLinearDisassembly(QSaveableGraphicsView):
 
         self.setScene(QGraphicsScene(self))
 
-        self.workspace.instance.cfg_updated.connect(self._add_items)
-        self.workspace.instance.cfb_updated.connect(self._add_items)
+        #self.workspace.instance.cfg_updated.connect(self.reload)
+        #self.workspace.instance.cfb_updated.connect(self.reload)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -41,7 +42,9 @@ class QLinearDisassembly(QSaveableGraphicsView):
     def redraw(self):
         self.scene().update(self.sceneRect())
 
+    @Slot()
     def reload(self):
+        _l.debug('Reloading the whole linear disassembly with %d items in it', len(self.scene().items()))
         self._add_items()
 
 
@@ -53,8 +56,9 @@ class QLinearDisassembly(QSaveableGraphicsView):
     def cfb(self):
         return self.workspace.instance.cfb
 
-    @Slot()
     def _add_items(self):
+        if self.cfb is None or self.cfg is None:
+            return
         self.scene().clear()
         x, y = 0, 0
         _l.debug('Refreshing QLinear')
@@ -72,7 +76,6 @@ class QLinearDisassembly(QSaveableGraphicsView):
             elif isinstance(obj, Unknown):
                 qobject = QUnknownBlock(self.workspace, obj_addr, obj.bytes)
             self.scene().addItem(qobject)
-            _l.debug('Adding item')
             qobject.setPos(x, y)
             y += qobject.height + self.OBJECT_PADDING
 
