@@ -10,6 +10,8 @@ from .jobs import CFGGenerationJob
 from ..logic import GlobalInfo
 from ..logic.threads import gui_thread_schedule_async
 from ..utils.namegen import NameGenerator
+from ..utils.subscriptions import subscribables
+
 class EventSentinel(object):
     def __init__(self):
         self.am_subscribers = []
@@ -90,11 +92,12 @@ class ObjectContainer(EventSentinel):
         return '(container %s)%s' % (self.am_name, repr(self._am_obj))
 
 
+@subscribables('selected_addr', 'selected_operand')
 class Instance(QObject):
     cfg_updated = Signal()
     cfb_updated = Signal()
     selected_addr_updated = Signal((int, int))
-    selected_operand_updated = Signal(object)
+    selected_operand_updated = Signal((object, object))
 
     def __init__(self, project=None):
         super().__init__()
@@ -119,33 +122,9 @@ class Instance(QObject):
         # The image name when loading image
         self.img_name = None
 
-        self._selected_addr = None
-        self._selected_operand = None
-
     #
     # Properties
     #
-
-    @property
-    def selected_addr(self):
-        return self._selected_addr
-
-    @selected_addr.setter
-    def selected_addr(self, v):
-        if self._selected_addr != v:
-            old_v = self._selected_addr
-            self._selected_addr = v
-            self.selected_addr_updated.emit(old_v, v)
-
-    @property
-    def selected_operand(self):
-        return self._selected_operand
-
-    @selected_operand.setter
-    def selected_operand(self, v):
-        if self._selected_operand != v:
-            self._selected_operand = v
-            self.selected_operand_updated.emit(v)
 
     @property
     def cfg(self):

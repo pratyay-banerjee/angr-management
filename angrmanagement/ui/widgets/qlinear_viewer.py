@@ -29,8 +29,6 @@ class QLinearDisassembly(QSaveableGraphicsView):
 
         self.workspace.instance.cfg_updated.connect(self.reload)
         self.workspace.instance.cfb_updated.connect(self.reload)
-        self.workspace.instance.selected_addr_updated.connect(self.refresh_all)
-        self.workspace.instance.selected_operand_updated.connect(self.refresh_all)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -50,15 +48,6 @@ class QLinearDisassembly(QSaveableGraphicsView):
     def reload(self):
         _l.debug('Reloading the whole linear disassembly with %d items in it', len(self.scene().items()))
         self._add_items()
-
-    @Slot(object)
-    def refresh_all(self, *args, **kwargs):
-        self.scene().invalidate()
-        _l.debug('Refreshing them all!')
-        for thing in self.scene().items():
-            thing.update()
-        self.scene().update(self.sceneRect())
-
 
     @property
     def cfg(self):
@@ -104,11 +93,15 @@ class QLinearDisassembly(QSaveableGraphicsView):
         half_maxwidth = maxwidth / 2
         half_totalheight = totalheight / 2
         self.scene().setSceneRect(- half_maxwidth, - half_totalheight, maxwidth, totalheight)
+        #self.scene().setSceneRect(0, 0, maxwidth, totalheight)
         y = -1 * (totalheight / 2)
+        #self.scene().setItemIndexMethod(QGraphicsScene.NoIndex)
+        #y = 0
         for obj in self.objects:
             self.scene().addItem(obj)
             obj.setPos(x, y)
             y += obj.height + self.OBJECT_PADDING
+        #self.scene().setItemIndexMethod(QGraphicsScene.BspTreeIndex)
 
         margins = QMarginsF(50, 25, 10, 25)
 

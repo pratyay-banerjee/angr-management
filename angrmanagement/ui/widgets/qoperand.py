@@ -2,7 +2,8 @@ import logging
 
 from PySide2.QtWidgets import QLabel, QHBoxLayout, QGraphicsItem, QGraphicsSimpleTextItem
 from PySide2.QtGui import QPainter, QColor
-from PySide2.QtCore import Qt, QRectF
+from PySide2.QtCore import Qt, QRectF, Slot
+from PySide2 import shiboken2 as shiboken
 
 from angr.analyses.code_location import CodeLocation
 from angr.analyses.disassembly import ConstantOperand, RegisterOperand, MemoryOperand
@@ -33,6 +34,8 @@ class QOperand(QCachedGraphicsItem):
         self.is_branch_target = is_branch_target
         self.is_indirect_branch = is_indirect_branch
         self.branch_targets = branch_targets
+
+        self.workspace.instance.subscribe_to_selected_operand(self.refresh_if_matches_operand)
 
         # the variable involved
         self.variable = None
@@ -68,28 +71,12 @@ class QOperand(QCachedGraphicsItem):
     # Public methods
     #
 
-    def refresh(self):
-        super(QOperand, self).refresh()
-
-        # if self.infodock.induction_variable_analysis is not None:
-        self._init_widgets()
-
-        self._update_size()
-
-    def select(self):
-        if not self.selected:
-            self.toggle_select()
-
-    def unselect(self):
-        if self.selected:
-            self.toggle_select()
-
-    def toggle_select(self):
-        self.selected = not self.selected
-        if self.selected:
-            self.infodock.selected_operand = self
-        else:
-            self.infodock.selected_operand = None
+    #@Slot(object)
+    def refresh_if_matches_operand(self, old_v, new_v):
+        if not shiboken.isValid(self):
+            return True
+        if self.equals_for_highlighting_purposes(old_v) or self.equals_for_highlighting_purposes(new_v):
+            self.update()
 
     #
     # Event handlers
@@ -353,6 +340,6 @@ class QOperand(QCachedGraphicsItem):
 
         return False
 
-class OperandHighlightMode(object):
+class OperandHighlightMode:
     SAME_IDENT = 0
     SAME_TEXT = 1

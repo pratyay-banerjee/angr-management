@@ -2,7 +2,8 @@ import logging
 
 from PySide2.QtWidgets import QLabel, QHBoxLayout, QSizePolicy, QGraphicsItem, QGraphicsSimpleTextItem
 from PySide2.QtGui import QCursor, QPainter, QColor
-from PySide2.QtCore import Qt, SIGNAL, QRectF
+from PySide2.QtCore import Qt, SIGNAL, QRectF, Slot
+from PySide2 import shiboken2 as shiboken
 
 from angr.analyses.disassembly import Value
 
@@ -40,6 +41,8 @@ class QInstruction(QCachedGraphicsItem):
         self._config = config
         self.mode = mode
 
+        self.workspace.instance.subscribe_to_selected_addr(self.update_if_at_addr)
+
         self.selected = False
 
         # all "widgets"
@@ -58,20 +61,11 @@ class QInstruction(QCachedGraphicsItem):
         #self.setContextMenuPolicy(Qt.CustomContextMenu)
         #self.connect(self, SIGNAL('customContextMenuRequested(QPoint)'), self._on_context_menu)
 
-    def refresh(self):
-        super(QInstruction, self).refresh()
-
-        for operand in self._operands:
-            operand.refresh()
-
-        #self._update_size()
-        self._init_widgets()
-        self._layout_operands()
-
-    def set_comment(self, new_text):
-        self._comment = new_text
-        self._comment_width = self._config.disasm_font_width * len(self._comment)
-        self._update_size()
+    def update_if_at_addr(self, old_addr, new_addr):
+        if not shiboken.isValid(self):
+            return True
+        if old_addr == self.addr or new_addr == self.addr:
+            self.update()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -83,43 +77,6 @@ class QInstruction(QCachedGraphicsItem):
         else:
             super().mousePressEvent(event)
 
-
-    # def on_mouse_pressed(self, button, pos):
-    #     if button == Qt.LeftButton:
-    #         # left click
-
-    #         # is it on one of the operands?
-    #         for op in self._operands:
-    #             if op.x <= pos.x() < op.x + op.width:
-    #                 op.on_mouse_pressed(button, pos)
-    #                 return
-
-    #         _l.debug('detected mouse press')
-    #         if self.workspace.instance.selected_addr != self.insn.addr:
-    #             _l.debug('Click detected! Setting...')
-    #             self.workspace.instance.selected_addr = self.insn.addr
-    #         else:
-    #             _l.debug('Click detected! Unsetting...')
-    #             self.workspace.instance.selected_addr = None
-    #     elif button == Qt.RightButton:
-    #         # right click
-    #         # display the context menu
-    #         self.disasm_view.instruction_context_menu(self.insn, QCursor.pos())
-
-    # def on_mouse_released(self, button, pos):
-    #     pass
-
-    # def on_mouse_doubleclicked(self, button, pos):
-
-    #     if button == Qt.LeftButton:
-    #         # left double click
-
-    #         # is it on one of the operands?
-    #         for op in self._operands:
-    #             if op.x <= pos.x() < op.x + op.width:
-    #                 op.on_mouse_doubleclicked(button, pos)
-    #                 return
-
     #
     # Private methods
     #
@@ -127,23 +84,6 @@ class QInstruction(QCachedGraphicsItem):
     @property
     def addr(self):
         return self.insn.addr
-
-
-    @property
-    def insn_backcolor(self):
-        r, g, b = None, None, None
-
-        # First we'll check for customizations
-        if self.disasm_view.insn_backcolor_callback:
-            is_selected = int(self._addr, 16) == self.workspace.instance.selected_addr
-            r, g, b = self.disasm_view.insn_backcolor_callback(self.insn.addr, is_selected)
-
-        # Fallback to defaults if we get Nones from the callback
-        if r is None or g is None or b is None:
-            if int(self._addr, 16) == self.workspace.instance.selected_addr:
-                r, g, b = 0xef, 0xbf, 0xba
-
-        return r, g, b
 
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         if self.addr == self.workspace.instance.selected_addr:

@@ -44,8 +44,8 @@ class QBlock(QCachedGraphicsItem):
         self.cfg_nodes = cfg_nodes
         self.out_branches = out_branches
 
-        # self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
-        # self.workspace.instance.selected_operand_updated.connect(self.refresh)
+        #self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
+        #self.workspace.instance.selected_operand_updated.connect(self.refresh)
 
         self._config = Conf
 
