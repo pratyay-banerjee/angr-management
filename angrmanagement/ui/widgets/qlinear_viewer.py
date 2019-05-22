@@ -77,6 +77,7 @@ class QLinearDisassembly(QSaveableGraphicsView):
         _l.debug('Refreshing QLinear')
         if self.cfb is None:
             return
+        maxwidth = 0
         for obj_addr, obj in self.cfb.floor_items():
             if isinstance(obj, Block):
                 cfg_node = self.cfg.get_any_node(obj_addr, force_fastpath=True)
@@ -92,21 +93,23 @@ class QLinearDisassembly(QSaveableGraphicsView):
                 self.objects.append(qobject)
             else:
                 continue
-            self.scene().addItem(qobject)
             qobject.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
-            qobject.update()
             y += qobject.height + self.OBJECT_PADDING
+            if qobject.width > maxwidth:
+                maxwidth = qobject.width
 
-        # This is some arcane Qt bs. Apparently QGraphicsScene does not perform well when not centered around 0.
+        # This is some arcane Qt bs. QGraphicsScene does not perform well when not centered around 0
         # https://stackoverflow.com/questions/6164543/qgraphicsscene-item-coordinates-affect-performance
         totalheight = y
+        half_maxwidth = maxwidth / 2
+        half_totalheight = totalheight / 2
+        self.scene().setSceneRect(- half_maxwidth, - half_totalheight, maxwidth, totalheight)
         y = -1 * (totalheight / 2)
         for obj in self.objects:
+            self.scene().addItem(obj)
             obj.setPos(x, y)
             y += obj.height + self.OBJECT_PADDING
 
-        for item in self.scene().items():
-            item.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
         margins = QMarginsF(50, 25, 10, 25)
 
         itemsBoundingRect = self.scene().itemsBoundingRect()
