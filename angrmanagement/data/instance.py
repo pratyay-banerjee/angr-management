@@ -92,12 +92,16 @@ class ObjectContainer(EventSentinel):
         return '(container %s)%s' % (self.am_name, repr(self._am_obj))
 
 
-@subscribables('selected_addr', 'selected_operand')
+@subscribables('selected_addr',
+               'selected_operand',
+               'cfg',
+               'cfb',
+               'partial_cfg',
+               'partial_cfb',
+               'selected_function')
 class Instance(QObject):
     cfg_updated = Signal()
     cfb_updated = Signal()
-    selected_addr_updated = Signal((int, int))
-    selected_operand_updated = Signal((object, object))
 
     def __init__(self, project=None):
         super().__init__()
@@ -113,40 +117,12 @@ class Instance(QObject):
 
         self._start_worker()
 
-        self._cfg = None
-        self._cfb = None
         self._disassembly = {}
 
         self.database_path = None
 
         # The image name when loading image
         self.img_name = None
-
-    #
-    # Properties
-    #
-
-    @property
-    def cfg(self):
-        return self._cfg
-
-    @cfg.setter
-    def cfg(self, v):
-        self._cfg = v
-        self.cfg_updated.emit()
-
-        # notify the workspace
-        if self.workspace is not None:
-            self.workspace.reload()
-
-    @property
-    def cfb(self):
-        return self._cfb
-
-    @cfb.setter
-    def cfb(self, v):
-        self._cfb = v
-        self.cfb_updated.emit()
 
     #
     # Public methods
@@ -173,7 +149,7 @@ class Instance(QObject):
              )
         self.add_job(cfg_job)
 
-        self._start_daemon_thread(self._refresh_cfg, 'Progressive Refreshing CFG', args=(cfg_job,))
+        #self._start_daemon_thread(self._refresh_cfg, 'Progressive Refreshing CFG', args=(cfg_job,))
 
     def add_job(self, job):
         self.jobs.append(job)

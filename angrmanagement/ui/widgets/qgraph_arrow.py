@@ -37,7 +37,7 @@ class QGraphArrow(QGraphicsItem):
                  QPointF(self.end.x(), self.end.y() + 6)]
         #self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
         path = QPainterPath(self.coords[0])
-        for c in self.coords[1:]:
+        for c in self.coords[1:] + self.arrow:
             path.lineTo(c)
         self.path = path
 

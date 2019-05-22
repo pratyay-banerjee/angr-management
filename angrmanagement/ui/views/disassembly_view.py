@@ -241,6 +241,8 @@ class DisassemblyView(BaseView):
     def display_function(self, function):
 
         self._jump_history.jump_to(function.addr)
+        self.workspace.instance.selected_function = function
+        self.workspace.instance.selected_addr = function.addr
         self._display_function(function)
 
     def decompile_current_function(self):
@@ -306,10 +308,8 @@ class DisassemblyView(BaseView):
         """
 
         if insn_addr in self.current_graph.selected_insns:
-            _l.debug('Case 1')
             self.current_graph.unselect_instruction(insn_addr)
         else:
-            _l.debug('Case 2')
             self.current_graph.select_instruction(insn_addr, unique=QApplication.keyboardModifiers() & Qt.CTRL == 0)
             self.current_graph.show_instruction(insn_addr)
 
@@ -426,6 +426,33 @@ class DisassemblyView(BaseView):
         self.display_disasm_graph()
         # self.display_linear_viewer()
 
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key_G:
+            # jump to window
+            self.popup_jumpto_dialog()
+            return
+        elif key == Qt.Key_Escape or (key == Qt.Key_Left and QApplication.keyboardModifiers() & Qt.ALT != 0):
+            # jump back
+            self.jump_back()
+            return
+        elif key == Qt.Key_Right and QApplication.keyboardModifiers() & Qt.ALT != 0:
+            # jump forward
+            self.jump_forward()
+            return
+        elif key == Qt.Key_A:
+            # switch between highlight mode
+            self.toggle_smart_highlighting(not self.infodock.smart_highlighting)
+            return
+        elif key == Qt.Key_Tab:
+            # decompile
+            self.decompile_current_function()
+            return
+        elif key == Qt.Key_Semicolon:
+            # add comment
+            self.popup_comment_dialog()
+        super().keyPressEvent(event)
+
     def keyReleaseEvent(self, event):
         key = event.key()
 
@@ -467,16 +494,11 @@ class DisassemblyView(BaseView):
         # self.infodock.variable_manager = variable_manager
 
         if self._flow_graph.isVisible():
+            self.workspace.instance.selected_insn = None
+            self.workspace.instance.selected_operand = None
             if self._flow_graph.function_graph is None or self._flow_graph.function_graph.function is not the_func:
-                # clear existing selected instructions and operands
-                self.workspace.instance.selected_insn = None
-                self.workspace.instance.selected_operand = None
                 # set function graph of a new function
                 self._flow_graph.function_graph = FunctionGraph(function=the_func)
-            else:
-                # still use the current function. just unselect existing selections.
-                self._flow_graph.unselect_all_instructions()
-                self._flow_graph.unselect_all_operands()
 
             self.workspace.view_manager.first_view_in_category('console').push_namespace({
                 'func': the_func,
@@ -491,7 +513,8 @@ class DisassemblyView(BaseView):
         function = locate_function(self.workspace.instance, addr)
         if function is not None:
             self._display_function(function)
-            self.toggle_instruction_selection(addr)
+            self.workspace.instance.selected_addr = addr
+            self.workspace.instance.selected_function = function
             return True
         else:
             return False

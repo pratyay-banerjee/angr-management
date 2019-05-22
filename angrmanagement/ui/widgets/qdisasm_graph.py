@@ -152,11 +152,7 @@ class QDisasmGraph(QZoomableDraggableGraphicsView):
 
         key = event.key()
 
-        if key == Qt.Key_G:
-            # jump to window
-            self.disassembly_view.popup_jumpto_dialog()
-            return
-        elif key == Qt.Key_N:
+        if key == Qt.Key_N:
             # rename a label
             self.disassembly_view.popup_rename_label_dialog()
             return
@@ -171,29 +167,6 @@ class QDisasmGraph(QZoomableDraggableGraphicsView):
                     operand = block.addr_to_insns[ins_addr].get_operand(operand_idx)
                     if operand is not None and operand.variable is not None:
                         self.disassembly_view.popup_xref_dialog(operand.variable)
-            return
-        elif key == Qt.Key_Escape or (key == Qt.Key_Left and QApplication.keyboardModifiers() & Qt.ALT != 0):
-            # jump back
-            self.disassembly_view.jump_back()
-            return
-        elif key == Qt.Key_Right and QApplication.keyboardModifiers() & Qt.ALT != 0:
-            # jump forward
-            self.disassembly_view.jump_forward()
-            return
-
-        elif key == Qt.Key_A:
-            # switch between highlight mode
-            self.disassembly_view.toggle_smart_highlighting(not self.infodock.smart_highlighting)
-            return
-
-        elif key == Qt.Key_Tab:
-            # decompile
-            self.disassembly_view.decompile_current_function()
-            return
-
-        elif key == Qt.Key_Semicolon:
-            # add comment
-            self.disassembly_view.popup_comment_dialog()
             return
 
         super().keyPressEvent(event)

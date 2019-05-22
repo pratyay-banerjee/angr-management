@@ -27,27 +27,35 @@ class QLinearDisassembly(QSaveableGraphicsView):
 
         self.setScene(QGraphicsScene(self))
 
-        self.workspace.instance.cfg_updated.connect(self.reload)
-        self.workspace.instance.cfb_updated.connect(self.reload)
+        self.workspace.instance.subscribe_to_cfg(lambda *args, **kwargs: self.reload())
+        self.workspace.instance.subscribe_to_cfb(lambda *args, **kwargs: self.reload())
+        self.workspace.instance.subscribe_to_selected_function(lambda old, new: self.goto_function(new))
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
-        self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        #self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
 
         self._disasms = { }
         self.objects = []
         self._add_items()
+        self._block_addr_map = {}
 
     def redraw(self):
         self.scene().update(self.sceneRect())
 
-    @Slot()
     def reload(self):
-        _l.debug('Reloading the whole linear disassembly with %d items in it', len(self.scene().items()))
         self._add_items()
+
+    def goto_function(self, func):
+        if func.addr not in self._block_addr_map:
+            _l.error('Unable to find entry block for function %s', func)
+        view_height = self.viewport().height()
+        desired_center_y = self._block_addr_map[func.addr].pos().y()
+        _l.debug('Going to function at 0x%x by scrolling to %s', func.addr, desired_center_y)
+        self.verticalScrollBar().setValue(desired_center_y - (view_height / 3))
 
     @property
     def cfg(self):
@@ -61,6 +69,7 @@ class QLinearDisassembly(QSaveableGraphicsView):
         self.objects.clear()
         if self.cfb is None or self.cfg is None:
             return
+        _l.debug('Reloading the whole linear disassembly')
         self.scene().clear()
         x, y = 0, 0
         _l.debug('Refreshing QLinear')
@@ -76,32 +85,28 @@ class QLinearDisassembly(QSaveableGraphicsView):
                 qobject = QLinearBlock(self.workspace, func_addr, self.disasm_view, disasm,
                                  self.disasm_view.infodock, obj.addr, [obj], {},
                                  )
-                self.objects.append(qobject)
             elif isinstance(obj, Unknown):
                 qobject = QUnknownBlock(self.workspace, obj_addr, obj.bytes)
-                self.objects.append(qobject)
             else:
                 continue
+            self.objects.append(qobject)
+            self._block_addr_map[obj_addr] = qobject
             qobject.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
             y += qobject.height + self.OBJECT_PADDING
             if qobject.width > maxwidth:
                 maxwidth = qobject.width
 
-        # This is some arcane Qt bs. QGraphicsScene does not perform well when not centered around 0
+        # QGraphicsScene does not perform well when not centered around 0
         # https://stackoverflow.com/questions/6164543/qgraphicsscene-item-coordinates-affect-performance
         totalheight = y
         half_maxwidth = maxwidth / 2
         half_totalheight = totalheight / 2
         self.scene().setSceneRect(- half_maxwidth, - half_totalheight, maxwidth, totalheight)
-        #self.scene().setSceneRect(0, 0, maxwidth, totalheight)
         y = -1 * (totalheight / 2)
-        #self.scene().setItemIndexMethod(QGraphicsScene.NoIndex)
-        #y = 0
         for obj in self.objects:
             self.scene().addItem(obj)
             obj.setPos(x, y)
             y += obj.height + self.OBJECT_PADDING
-        #self.scene().setItemIndexMethod(QGraphicsScene.BspTreeIndex)
 
         margins = QMarginsF(50, 25, 10, 25)
 
@@ -109,6 +114,7 @@ class QLinearDisassembly(QSaveableGraphicsView):
         paddedRect = itemsBoundingRect.marginsAdded(margins)
         self.setSceneRect(paddedRect)
         self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
 
     def _get_disasm(self, func):
         """
