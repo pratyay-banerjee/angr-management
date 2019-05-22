@@ -4,6 +4,7 @@ from PySide2.QtCore import Qt
 from ...config import Conf
 from PySide2.QtWidgets import QGraphicsItem
 from PySide2.QtCore import QRectF
+from PySide2.QtGui import QPainter
 
 
 class QUnknownBlock(QGraphicsItem):
@@ -11,9 +12,8 @@ class QUnknownBlock(QGraphicsItem):
     LINEAR_INSTRUCTION_OFFSET = 120
     DEFAULT_TEXT = 'Unknown'
 
-    def __init__(self, workspace, addr, bytes_):
-
-        super(QUnknownBlock, self).__init__()
+    def __init__(self, workspace, addr, bytes_, parent=None):
+        super().__init__(parent=parent)
 
         self.workspace = workspace
         self.addr = addr
@@ -24,6 +24,8 @@ class QUnknownBlock(QGraphicsItem):
         self._addr_width = None
         self._bytes_width = None
         self._bytes_height = None
+
+        self._config = Conf
 
         self._init_widgets()
 
@@ -40,6 +42,10 @@ class QUnknownBlock(QGraphicsItem):
         return self.boundingRect().height()
 
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
+
+        painter.setRenderHints(
+                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+        painter.setFont(self._config.disasm_font)
 
         x, y = 0, 0
 

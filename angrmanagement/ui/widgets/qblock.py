@@ -1,7 +1,7 @@
 import logging
 
 from PySide2.QtGui import QPainter, QLinearGradient, QColor, QBrush, QPen, QPainterPath
-from PySide2.QtCore import QPointF, Qt, QRectF, Slot
+from PySide2.QtCore import QPointF, Qt, QRectF, Slot, QMarginsF
 from PySide2.QtWidgets import QGraphicsItem
 
 from angr.analyses.disassembly import Instruction
@@ -18,14 +18,15 @@ from .qblock_label import QBlockLabel
 from .qphivariable import QPhiVariable
 from .qvariable import QVariable
 
+from .qgraph_object import QCachedGraphicsItem
 
 _l = logging.getLogger(__name__)
-_l.setLevel(logging.DEBUG)
+#_l.setLevel(logging.DEBUG)
 
-class QBlock(QGraphicsItem):
+class QBlock(QCachedGraphicsItem):
     TOP_PADDING = 0
     BOTTOM_PADDING = 0
-    GRAPH_LEFT_PADDING = 10
+    LEFT_PADDING = 10
     RIGHT_PADDING = 10
     SPACING = 0
 
@@ -43,10 +44,8 @@ class QBlock(QGraphicsItem):
         self.cfg_nodes = cfg_nodes
         self.out_branches = out_branches
 
-        self._cachy = None
-
-        self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
-        self.workspace.instance.selected_operand_updated.connect(self.refresh)
+        # self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
+        # self.workspace.instance.selected_operand_updated.connect(self.refresh)
 
         self._config = Conf
 
@@ -55,11 +54,9 @@ class QBlock(QGraphicsItem):
         self.addr_to_labels = { }
 
         self._init_widgets()
-        self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
 
         self._objects_are_hidden = False
 
-        self._rect = None
         self._path = QPainterPath()
         self._path.addRect(0, 0, self.width, self.height)
 
@@ -83,70 +80,16 @@ class QBlock(QGraphicsItem):
     # Public methods
     #
 
-    @Slot(int)
+    @Slot(object)
     def refresh_if_contains_addr(self, addr1, addr2):
         if addr1 in self.addr_to_insns or addr2 in self.addr_to_insns:
             self.refresh()
 
     def refresh(self):
-        self._init_widgets()
         self.update()
-
-    def update_label(self, label_addr):
-        label = self.addr_to_labels.get(label_addr, None)
-        if label is not None:
-            label.label = self.disasm.kb.labels[label_addr]
-        else:
-            raise Exception('Label at address %#x is not found.' % label_addr)
-
-    def instruction_position(self, insn_addr):
-        if insn_addr in self.addr_to_insns:
-            insn = self.addr_to_insns[insn_addr]
-            x = self.x + self.GRAPH_LEFT_PADDING
-            y = self.y + self.TOP_PADDING + self.objects.index(insn) * (self._config.disasm_font_height + self.SPACING)
-            return x, y
-
-        return None
 
     def size(self):
         return self.width, self.height
-
-    #
-    # Event handlers
-    #
-
-    # def mousePressEvent(self, event):
-    #     _l.debug('QBlock got a mouse press')
-    #     button = event.button()
-    #     pos = event.pos()
-    #     if button == Qt.LeftButton:
-    #         event.accept()
-    #         for obj in self.objects:
-    #             if obj.y <= pos.y() < obj.y + obj.height:
-    #                 obj.on_mouse_pressed(button, pos)
-    #                 break
-    #         else:
-    #             _l.debug('Deactivating selected addr and operand')
-    #             self.workspace.instance.selected_addr = None
-    #             self.workspace.instance.selected_operand = None
-
-
-    # def mouseReleaseEvent(self, event):
-    #     button = event.button()
-    #     pos = event.pos()
-    #     if button == Qt.RightButton or button == Qt.LeftButton:
-    #         event.accept()
-    #         for obj in self.objects:
-    #             if obj.y <= pos.y() < obj.y + obj.height:
-    #                 obj.on_mouse_released(button, pos)
-
-    # def mouseDoubleClickEvent(self, event):
-    #     button = event.button()
-    #     pos = event.pos()
-    #     if button == Qt.LeftButton:
-    #         for obj in self.objects:
-    #             if obj.y <= pos.y() < obj.y + obj.height:
-    #                 obj.on_mouse_doubleclicked(button, pos)
 
     #
     # Initialization
@@ -186,20 +129,15 @@ class QBlock(QGraphicsItem):
     # Private methods
     #
 
-    def boundingRect(self):
-        if self._cachy is None:
-            self._cachy = self.childrenBoundingRect()
-        return self._cachy
-
 class QGraphBlock(QBlock):
-    MINIMUM_DETAIL_LEVEL = 0.3
+    MINIMUM_DETAIL_LEVEL = 0.4
 
     @property
     def mode(self):
         return 'graph'
 
     def layout_widgets(self):
-        x, y = 0, 0
+        x, y = self.LEFT_PADDING, self.TOP_PADDING
         for obj in self.objects:
             obj.setPos(x, y)
             y += obj.boundingRect().height()
@@ -209,11 +147,6 @@ class QGraphBlock(QBlock):
         should_omit_text = lod < QGraphBlock.MINIMUM_DETAIL_LEVEL
 
 
-        if not should_omit_text:
-            painter.setRenderHints(
-                    QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
-
-        #painter.setFont(Conf.code_font)
         # background of the node
         if should_omit_text:
             painter.setBrush(QColor(0xda, 0xda, 0xda))
@@ -232,54 +165,43 @@ class QGraphBlock(QBlock):
                 obj.setEnabled(not should_omit_text)
             self._objects_are_hidden = should_omit_text
 
-    def _calculate_size(self):
-        height = len(self.objects) * self._config.disasm_font_height + \
-                      (len(self.objects) - 1) * self.SPACING
-
-        height += self.TOP_PADDING
-        height += self.BOTTOM_PADDING
-
-        # calculate width
-
-        width = (max([obj.width for obj in self.objects]) if self.objects else 0) + \
-                      self.RIGHT_PADDING
-        width += self.GRAPH_LEFT_PADDING
-
-        return QRectF(0, 0, width+10, height+10)
+    def _boundingRect(self):
+        cbr = self.childrenBoundingRect()
+        margins = QMarginsF(self.LEFT_PADDING, self.TOP_PADDING, self.RIGHT_PADDING, self.BOTTOM_PADDING)
+        return cbr.marginsAdded(margins)
 
 class QLinearBlock(QBlock):
+    ADDRESS_PADDING = 10
+
     @property
     def mode(self):
         return 'linear'
 
+    def format_address(self, addr):
+        return '{:08x}'.format(addr)
+
     def layout_widgets(self):
         y_offset = 0
 
+        max_width = 0
         for obj in self.objects:
             y_offset += self.SPACING
-
-            obj.x = 0
-            obj.y = y_offset
-            if hasattr(obj, '_layout_operands'):
-                obj._layout_operands()
-
+            addr_width = self._config.disasm_font_metrics.width(self.format_address(obj.addr))
+            obj_start = addr_width + self.ADDRESS_PADDING
+            obj.setPos(obj_start, y_offset)
+            if obj_start + obj.width > max_width:
+                max_width = obj_start + obj.width
             y_offset += obj.height
+        self._height = y_offset
+        self._width = max_width
 
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         _l.debug('Painting linear block')
         y_offset = 0
-
-        self.layout_widgets()
         for obj in self.objects:
-            obj.paint(painter)
+            painter.drawText(0, y_offset+self._config.disasm_font_ascent, '{:08x}'.format(obj.addr))
+            y_offset += self._config.disasm_font_height + self.SPACING
 
-    def _calculate_size(self):
-        height = len(self.objects) * self._config.disasm_font_height + \
-                      (len(self.objects) - 1) * self.SPACING
+    def _boundingRect(self):
+        return QRectF(0, 0, self._width, self._height)
 
-        # calculate width
-
-        width = (max([obj.width for obj in self.objects]) if self.objects else 0) + \
-                      self.RIGHT_PADDING
-
-        return QRectF(0, 0, width, height)

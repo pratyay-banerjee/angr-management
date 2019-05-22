@@ -2,17 +2,17 @@ import logging
 
 from PySide2.QtWidgets import QLabel, QHBoxLayout, QGraphicsItem, QGraphicsSimpleTextItem
 from PySide2.QtGui import QPainter, QColor
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, QRectF
 
 from angr.analyses.code_location import CodeLocation
 from angr.analyses.disassembly import ConstantOperand, RegisterOperand, MemoryOperand
 
-from .qgraph_object import QGraphObject
+from .qgraph_object import QCachedGraphicsItem
 
 l = logging.getLogger('ui.widgets.qoperand')
 
 
-class QOperand(QGraphicsItem):
+class QOperand(QCachedGraphicsItem):
 
     BRANCH_TARGETS_SPACING = 5
     VARIABLE_IDENT_SPACING = 5
@@ -64,20 +64,9 @@ class QOperand(QGraphicsItem):
     def text(self):
         return self._label
 
-    @property
-    def height(self):
-        return self.boundingRect().height()
-
-    @property
-    def width(self):
-        return self.boundingRect().width()
-
     #
     # Public methods
     #
-
-    def paint(self, painter, option, widget): #pylint: disable=unused-argument
-        pass
 
     def refresh(self):
         super(QOperand, self).refresh()
@@ -112,6 +101,8 @@ class QOperand(QGraphicsItem):
                 self.workspace.instance.selected_operand = self
             else:
                 self.workspace.instance.selected_operand = None
+        else:
+            super().mousePressEvent(event)
 
     #
     # Private methods
@@ -156,6 +147,19 @@ class QOperand(QGraphicsItem):
             return [ ]
 
         return list(branch_targets)[ : n]
+
+    def paint(self, painter, option, widget): #pylint: disable=unused-argument
+        if self.equals_for_highlighting_purposes(self.workspace.instance.selected_operand):
+            painter.setBrush(Qt.green)
+            painter.setPen(Qt.green)
+            painter.drawRect(0, 0, self.width, self.height)
+        painter.setBrush(Qt.black)
+        painter.setPen(Qt.black)
+        painter.setRenderHints(
+                QPainter.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.HighQualityAntialiasing)
+        painter.setFont(self._config.disasm_font)
+        y = self._config.disasm_font_ascent
+        painter.drawText(0, y, self.text)
 
     def _init_widgets(self):
 
@@ -248,12 +252,12 @@ class QOperand(QGraphicsItem):
         else:
             self._variable_ident_width = 0
 
-        QGraphicsSimpleTextItem(self.text, parent=self).setPos(0, 0)
+        self._width = self._config.disasm_font_metrics.width(self.text)
+        self._height = self._config.disasm_font_height
+        self.recalculate_size()
 
-    def boundingRect(self):
-        if self._cachy is None:
-            self._cachy = self.childrenBoundingRect()
-        return self._cachy
+    def _boundingRect(self):
+        return QRectF(0, 0, self._width, self._height)
 
     def _pick_variable(self, variable_and_offsets):
         """

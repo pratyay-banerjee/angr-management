@@ -35,7 +35,7 @@ class QGraphArrow(QGraphicsItem):
             self.color = QColor(0x56, 0x5a, 0x5c)
         self.arrow = [QPointF(self.end.x() - 3, self.end.y()), QPointF(self.end.x() + 3, self.end.y()),
                  QPointF(self.end.x(), self.end.y() + 6)]
-        self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
+        #self.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
         path = QPainterPath(self.coords[0])
         for c in self.coords[1:]:
             path.lineTo(c)
@@ -68,20 +68,4 @@ class QGraphArrow(QGraphicsItem):
     def boundingRect(self):
         if self.rect is None:
             self.rect = self.path.boundingRect()
-            # minx = None
-            # maxx = None
-            # miny = None
-            # maxy = None
-            # for pt in self.coords:
-            #     y = pt.y()
-            #     x = pt.x()
-            #     if minx is None or x < minx:
-            #         minx = x
-            #     if maxx is None or x > maxx:
-            #         maxx = x
-            #     if miny is None or y < miny:
-            #         miny = y
-            #     if maxy is None or y > maxy:
-            #         maxy = y
-            # self.rect = QRectF(QPointF(minx-10, miny-10), QPointF(maxx+10, maxy+10))
         return self.rect

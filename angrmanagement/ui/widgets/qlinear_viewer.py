@@ -1,7 +1,7 @@
 import logging
 
 from PySide2.QtWidgets import QWidget, QHBoxLayout, QAbstractSlider, QGraphicsView, QGraphicsScene, QGraphicsItem
-from PySide2.QtGui import QPainter, QWheelEvent
+from PySide2.QtGui import QPainter, QWheelEvent, QPixmapCache
 from PySide2.QtCore import Qt, QPointF, Slot, QPoint, QMarginsF
 from sortedcontainers import SortedDict
 
@@ -27,8 +27,10 @@ class QLinearDisassembly(QSaveableGraphicsView):
 
         self.setScene(QGraphicsScene(self))
 
-        #self.workspace.instance.cfg_updated.connect(self.reload)
-        #self.workspace.instance.cfb_updated.connect(self.reload)
+        self.workspace.instance.cfg_updated.connect(self.reload)
+        self.workspace.instance.cfb_updated.connect(self.reload)
+        self.workspace.instance.selected_addr_updated.connect(self.refresh_all)
+        self.workspace.instance.selected_operand_updated.connect(self.refresh_all)
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -36,7 +38,9 @@ class QLinearDisassembly(QSaveableGraphicsView):
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
+
         self._disasms = { }
+        self.objects = []
         self._add_items()
 
     def redraw(self):
@@ -46,6 +50,14 @@ class QLinearDisassembly(QSaveableGraphicsView):
     def reload(self):
         _l.debug('Reloading the whole linear disassembly with %d items in it', len(self.scene().items()))
         self._add_items()
+
+    @Slot(object)
+    def refresh_all(self, *args, **kwargs):
+        self.scene().invalidate()
+        _l.debug('Refreshing them all!')
+        for thing in self.scene().items():
+            thing.update()
+        self.scene().update(self.sceneRect())
 
 
     @property
@@ -57,6 +69,7 @@ class QLinearDisassembly(QSaveableGraphicsView):
         return self.workspace.instance.cfb
 
     def _add_items(self):
+        self.objects.clear()
         if self.cfb is None or self.cfg is None:
             return
         self.scene().clear()
@@ -73,12 +86,27 @@ class QLinearDisassembly(QSaveableGraphicsView):
                 qobject = QLinearBlock(self.workspace, func_addr, self.disasm_view, disasm,
                                  self.disasm_view.infodock, obj.addr, [obj], {},
                                  )
+                self.objects.append(qobject)
             elif isinstance(obj, Unknown):
                 qobject = QUnknownBlock(self.workspace, obj_addr, obj.bytes)
+                self.objects.append(qobject)
+            else:
+                continue
             self.scene().addItem(qobject)
-            qobject.setPos(x, y)
+            qobject.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
+            qobject.update()
             y += qobject.height + self.OBJECT_PADDING
 
+        # This is some arcane Qt bs. Apparently QGraphicsScene does not perform well when not centered around 0.
+        # https://stackoverflow.com/questions/6164543/qgraphicsscene-item-coordinates-affect-performance
+        totalheight = y
+        y = -1 * (totalheight / 2)
+        for obj in self.objects:
+            obj.setPos(x, y)
+            y += obj.height + self.OBJECT_PADDING
+
+        for item in self.scene().items():
+            item.setCacheMode(QGraphicsItem.DeviceCoordinateCache)
         margins = QMarginsF(50, 25, 10, 25)
 
         itemsBoundingRect = self.scene().itemsBoundingRect()
