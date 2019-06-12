@@ -14,7 +14,6 @@ from .qunknown_block import QUnknownBlock
 from .qgraph import QSaveableGraphicsView
 
 _l = logging.getLogger(__name__)
-_l.setLevel(logging.DEBUG)
 
 class QLinearDisassembly(QSaveableGraphicsView):
     OBJECT_PADDING = 0
@@ -35,7 +34,8 @@ class QLinearDisassembly(QSaveableGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
-        #self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.setResizeAnchor(QGraphicsView.NoAnchor)
+        self.setAlignment(Qt.AlignLeft)
 
 
         self._disasms = { }

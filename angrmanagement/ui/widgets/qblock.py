@@ -44,9 +44,6 @@ class QBlock(QCachedGraphicsItem):
         self.cfg_nodes = cfg_nodes
         self.out_branches = out_branches
 
-        #self.workspace.instance.selected_addr_updated.connect(self.refresh_if_contains_addr)
-        #self.workspace.instance.selected_operand_updated.connect(self.refresh)
-
         self._config = Conf
 
         self.objects = [ ]  # instructions and labels
@@ -104,12 +101,12 @@ class QBlock(QCachedGraphicsItem):
             if isinstance(obj, Instruction):
                 out_branch = get_out_branches_for_insn(self.out_branches, obj.addr)
                 insn = QInstruction(self.workspace, self.func_addr, self.disasm_view, self.disasm,
-                                    self.infodock, obj, out_branch, self._config, mode=self.mode, parent=self)
+                                    self.infodock, obj, out_branch, self._config, parent=self)
                 self.objects.append(insn)
                 self.addr_to_insns[obj.addr] = insn
             elif isinstance(obj, Label):
                 # label
-                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, mode=self.mode, parent=self)
+                label = QBlockLabel(obj.addr, obj.text, self._config, self.disasm_view, self.workspace, parent=self)
                 self.objects.append(label)
                 self.addr_to_labels[obj.addr] = label
             # elif isinstance(obj, PhiVariable):
@@ -198,6 +195,7 @@ class QLinearBlock(QBlock):
     def paint(self, painter, option, widget): #pylint: disable=unused-argument
         _l.debug('Painting linear block')
         y_offset = 0
+        painter.setFont(self._config.disasm_font)
         for obj in self.objects:
             painter.drawText(0, y_offset+self._config.disasm_font_ascent, '{:08x}'.format(obj.addr))
             y_offset += self._config.disasm_font_height + self.SPACING

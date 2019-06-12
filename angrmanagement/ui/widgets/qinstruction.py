@@ -26,7 +26,7 @@ class QInstruction(QCachedGraphicsItem):
 
     LINEAR_INSTRUCTION_OFFSET = 120
 
-    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, insn, out_branch, config, mode='graph', parent=None):
+    def __init__(self, workspace, func_addr, disasm_view, disasm, infodock, insn, out_branch, config, parent=None):
         super().__init__(parent=parent)
 
         # initialization
@@ -39,11 +39,8 @@ class QInstruction(QCachedGraphicsItem):
         self.insn = insn
         self.out_branch = out_branch
         self._config = config
-        self.mode = mode
 
         self.workspace.instance.subscribe_to_selected_addr(self.update_if_at_addr)
-
-        self.selected = False
 
         # all "widgets"
         self._addr = None
@@ -57,9 +54,6 @@ class QInstruction(QCachedGraphicsItem):
         self._comment_width = None
 
         self._init_widgets()
-
-        #self.setContextMenuPolicy(Qt.CustomContextMenu)
-        #self.connect(self, SIGNAL('customContextMenuRequested(QPoint)'), self._on_context_menu)
 
     def update_if_at_addr(self, old_addr, new_addr):
         if not shiboken.isValid(self):
