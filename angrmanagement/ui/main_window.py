@@ -1,8 +1,7 @@
 import pickle
 import os
-from functools import partial
 
-from PySide2.QtWidgets import QMainWindow, QTabWidget, QFileDialog, QProgressBar, QMessageBox, QSplitter, QHBoxLayout, QWidget, QShortcut
+from PySide2.QtWidgets import QMainWindow, QTabWidget, QFileDialog, QProgressBar, QMessageBox, QSplitter, QHBoxLayout, QWidget, QShortcut, QLabel
 from PySide2.QtGui import QResizeEvent, QIcon, QDesktopServices, QKeySequence
 from PySide2.QtCore import Qt, QSize, QEvent, QTimer, QUrl
 
@@ -18,25 +17,29 @@ except ImportError as e:
 from ..plugins import PluginManager
 from ..logic import GlobalInfo
 from ..data.instance import Instance
+from ..data.jobs.loading import LoadTargetJob, LoadBinaryJob
 from .menus.file_menu import FileMenu
 from .menus.analyze_menu import AnalyzeMenu
 from .menus.help_menu import HelpMenu
 from .menus.view_menu import ViewMenu
 from .menus.plugin_menu import PluginMenu
+from .menus.sync_menu import SyncMenu
 from ..config import IMG_LOCATION
 from .workspace import Workspace
-from .dialogs.load_binary import LoadBinary, LoadBinaryError
 from .dialogs.load_plugins import LoadPlugins, LoadPluginsError
 from .dialogs.load_docker_prompt import LoadDockerPrompt, LoadDockerPromptError
 from .dialogs.new_state import NewState
+from .dialogs.sync_config import SyncConfig
+from .dialogs.about import LoadAboutDialog
 from .toolbars import StatesToolbar, AnalysisToolbar, FileToolbar
+from ..utils import has_binsync
 
 
 class MainWindow(QMainWindow):
     """
     The main window of angr management.
     """
-    def __init__(self, file_to_open=None, parent=None):
+    def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
         icon_location = os.path.join(IMG_LOCATION, 'angr.png')
@@ -51,6 +54,7 @@ class MainWindow(QMainWindow):
 
         self.workspace = None
         self.central_widget = None
+        self.central_widget2 = None
         self._plugin_mgr = None  # type: PluginManager
 
         self._file_toolbar = None  # type: FileToolbar
@@ -70,6 +74,7 @@ class MainWindow(QMainWindow):
         self._view_menu = None
         self._help_menu = None
         self._plugin_menu = None
+        self._sync_menu = None
 
         self._init_toolbars()
         self._init_statusbar()
@@ -84,9 +89,6 @@ class MainWindow(QMainWindow):
         self.show()
 
         self.status = "Ready."
-
-        if file_to_open is not None:
-            self.load_file(file_to_open)
 
     def sizeHint(self, *args, **kwargs):
         return QSize(1200, 800)
@@ -142,19 +144,6 @@ class MainWindow(QMainWindow):
             return # User canceled
         return prompt.textValue()
 
-    def _load_options_dialog(self, partial_ld):
-        try:
-            self._load_binary_dialog = LoadBinary(partial_ld)
-            self._load_binary_dialog.setModal(True)
-            self._load_binary_dialog.exec_()
-
-            if self._load_binary_dialog.cfg_args is not None:
-                # load the binary
-                return (self._load_binary_dialog.load_options, self._load_binary_dialog.cfg_args)
-        except LoadBinaryError:
-            pass
-        return None, None
-
     def open_load_plugins_dialog(self):
         try:
             dlg = LoadPlugins(self._plugin_mgr)
@@ -171,8 +160,18 @@ class MainWindow(QMainWindow):
     def open_doc_link(self):
         QDesktopServices.openUrl(QUrl("https://docs.angr.io/", QUrl.TolerantMode))
 
+    def open_sync_config_dialog(self):
+        if self.workspace.instance.project is None:
+            # project does not exist yet
+            return
+
+        sync_config = SyncConfig(self.workspace.instance, parent=self)
+        sync_config.exec_()
+
     def open_about_dialog(self):
-        QMessageBox.about(self, "About angr", "Version 8")
+        dlg = LoadAboutDialog()
+        dlg.exec_()
+
     #
     # Widgets
     #
@@ -211,6 +210,12 @@ class MainWindow(QMainWindow):
         self.menuBar().addMenu(self._file_menu.qmenu())
         self.menuBar().addMenu(self._view_menu.qmenu())
         self.menuBar().addMenu(self._analyze_menu.qmenu())
+        if has_binsync():
+            self._sync_menu = SyncMenu(self)
+            self.menuBar().addMenu(self._sync_menu.qmenu())
+            def on_load(**kwargs):
+                self._sync_menu.action_by_key("config").enable()
+            self.workspace.instance._project_container.am_subscribe(on_load)
         self.menuBar().addMenu(self._plugin_menu.qmenu())
         self.menuBar().addMenu(self._help_menu.qmenu())
 
@@ -235,6 +240,7 @@ class MainWindow(QMainWindow):
         self.workspace = wk
         self.workspace.view_manager.tabify_center_views()
         self.central_widget.setTabPosition(Qt.RightDockWidgetArea, QTabWidget.North)
+        self.central_widget2.setTabPosition(Qt.LeftDockWidgetArea, QTabWidget.North)
 
     #
     # Shortcuts
@@ -321,37 +327,16 @@ class MainWindow(QMainWindow):
         img_name = self._pick_image_dialog()
         if img_name is None:
             return
+        target = archr.targets.DockerImageTarget(img_name, target_path=None)
+        self.workspace.instance.add_job(LoadTargetJob(target))
         self.workspace.instance.set_image(img_name)
-        self.load_image(img_name)
 
     def load_file(self, file_path):
         if os.path.isfile(file_path):
             if file_path.endswith(".adb"):
                 self.load_database(file_path)
             else:
-                partial_ld = cle.Loader(file_path, perform_relocations=False)
-                load_options, cfg_args = self._load_options_dialog(partial_ld)
-                partial_ld.close()
-                if cfg_args is None:
-                    return
-
-                proj = angr.Project(file_path, load_options=load_options)
-                self._set_proj(proj, cfg_args)
-
-    def load_image(self, img_name):
-        with archr.targets.DockerImageTarget(img_name, target_path=None).build().start() as t:
-            # this is perhaps the point where we should split out loading of generic targets?
-            dsb = archr.arsenal.DataScoutBow(t)
-            apb = archr.arsenal.angrProjectBow(t, dsb)
-            partial_ld = apb.fire(return_loader=True, perform_relocations=False)
-            load_options, cfg_args = self._load_options_dialog(partial_ld)
-            partial_ld.close()
-            if cfg_args is None:
-                return
-
-            # Create the project, load it, then record the image name on success
-            proj = apb.fire(use_sim_procedures=True, load_options=load_options)
-            self._set_proj(proj, cfg_args)
+                self.workspace.instance.add_job(LoadBinaryJob(file_path))
 
     def save_database(self):
         if self.workspace.instance.database_path is None:
@@ -388,6 +373,9 @@ class MainWindow(QMainWindow):
     def interact(self):
         self.workspace.interact_program(self.workspace.instance.img_name)
 
+    def setup_sync(self):
+        self.open_sync_config_dialog()
+
     #
     # Other public methods
     #
@@ -399,12 +387,6 @@ class MainWindow(QMainWindow):
     #
     # Private methods
     #
-
-    def _set_proj(self, proj, cfg_args=None):
-        if cfg_args is None:
-            cfg_args = {}
-        self.workspace.instance.project = proj
-        self.workspace.instance.initialize(cfg_args=cfg_args)
 
     def _load_database(self, file_path):
         with open(file_path, "rb") as o:

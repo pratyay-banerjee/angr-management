@@ -17,7 +17,7 @@ class CFGGenerationJob(Job):
     }
 
     def __init__(self, on_finish=None, **kwargs):
-        super(CFGGenerationJob, self).__init__(name='CFG generation', on_finish=on_finish)
+        super().__init__(name='CFG generation', on_finish=on_finish)
 
         # TODO: sanitize arguments
 
@@ -38,6 +38,7 @@ class CFGGenerationJob(Job):
         cfg = inst.project.analyses.CFG(progress_callback=self._progress_callback,
                                         low_priority=True,
                                         cfb=temp_cfb,
+                                        use_patches=True,
                                         **self.cfg_args
                                         )
         self._cfb = None
@@ -62,14 +63,16 @@ class CFGGenerationJob(Job):
     # Private methods
     #
 
-    def _progress_callback(self, percentage, cfg=None):
+    def _progress_callback(self, percentage, text=None, cfg=None):
 
         t = time.time()
         if self._last_progress_callback_triggered is not None and t - self._last_progress_callback_triggered < 0.2:
             return
         self._last_progress_callback_triggered = t
 
-        super()._progress_callback(percentage)
+        text = "%.02f%%" % percentage
+
+        super()._progress_callback(percentage, text=text)
 
         if cfg is not None:
             # Peek into the CFG

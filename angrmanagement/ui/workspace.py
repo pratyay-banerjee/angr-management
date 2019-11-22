@@ -12,9 +12,12 @@ from angr import StateHierarchy
 from ..data.instance import ObjectContainer
 from ..data.jobs import CodeTaggingJob
 from ..config import Conf
-from .views import FunctionsView, DisassemblyView, SymexecView, StatesView, StringsView, RecoView, ConsoleView, CodeView, InteractionView
+from .views import (FunctionsView, DisassemblyView, SymexecView, StatesView, StringsView, RecoView, ConsoleView, CodeView, InteractionView, SyncView, PatchesView)
+
 from .widgets.qsmart_dockwidget import QSmartDockWidget
 from .view_manager import ViewManager
+
+from ..utils import has_binsync
 
 _l = logging.getLogger(__name__)
 
@@ -24,7 +27,7 @@ class Workspace:
 
         self._main_window = main_window
         self._instance = instance
-        self.is_split = 0
+        self.is_split = False
         self.split_tab_id = 0
         instance.workspace = self
 
@@ -44,9 +47,14 @@ class Workspace:
             StatesView(self, 'center'),
             StringsView(self, 'center'),
             RecoView(self,'center'),
+            PatchesView(self, 'center'),
             InteractionView(self, 'center'),
             ConsoleView(self, 'bottom'),
         ]
+
+        if has_binsync():
+            self.default_tabs.append(SyncView(self, 'right'))
+
 
         #
         # Save initial splitter state
@@ -107,14 +115,15 @@ class Workspace:
         """
 
         window_id = self.view_manager.get_current_tab_id()
-        if self.is_split == 0:
+        if self.is_split is False:
             self._main_window.central_widget.removeDockWidget(self.view_manager.docks[window_id])
             dock_area = ViewManager.DOCKING_POSITIONS.get(self.default_tabs[window_id].default_docking_position,
                                                           Qt.RightDockWidgetArea)
             dock = QSmartDockWidget(self.default_tabs[window_id].caption, parent=self.default_tabs[window_id])
+            self._main_window.central_widget2.show()
             self._main_window.central_widget2.addDockWidget(dock_area, dock)
             dock.setWidget(self.default_tabs[window_id])
-            self.is_split = 1
+            self.is_split = True
             self.split_tab_id = window_id
             self.last_unsplit_view = dock
             self._main_window.central_widget_main.setStretchFactor(1,1)
@@ -129,8 +138,9 @@ class Workspace:
         :return:    None
         """
 
-        if self.is_split == 1:
+        if self.is_split is True:
             window_id = self.split_tab_id
+            self._main_window.central_widget2.hide()
             self._main_window.central_widget2.removeDockWidget(self.last_unsplit_view)
             dock_area = ViewManager.DOCKING_POSITIONS.get(self.default_tabs[window_id].default_docking_position,
                                                           Qt.RightDockWidgetArea)
@@ -141,7 +151,7 @@ class Workspace:
             self._main_window.central_widget_main.setStretchFactor(1,0)
             self._main_window.central_widget_main.restoreState(self.splitter_state.value("splitterSizes"))
             self.view_manager.tabify_center_views()
-            self.is_split = 0
+            self.is_split = False
 
     def toggle_split(self):
         """
@@ -150,7 +160,7 @@ class Workspace:
         :return:    None
         """
 
-        if self.is_split == 0:
+        if self.is_split is False:
             self.split_view()
         else:
             self.unsplit_view()
@@ -206,6 +216,14 @@ class Workspace:
         view.decompile_current_function()
 
     def decompile_function(self, func, view=None):
+        """
+        Decompile a function and switch to the pseudocode view.
+
+        :param Function func:   The function to decompile.
+        :param view:    The pseudocode view to raise.
+        :return:        None
+        """
+
         if view is None or view.category != "pseudocode":
             view = self._get_or_create_pseudocode_view()
 
@@ -235,6 +253,13 @@ class Workspace:
 
         self.raise_view(view)
         view.setFocus()
+
+    def log(self, msg):
+        console = self.view_manager.first_view_in_category('console')
+        if console is None:
+            print(msg)
+        else:
+            console.print_text(msg)
 
     #
     # Private methods

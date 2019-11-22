@@ -1,31 +1,42 @@
-import pickle
+
 import time
 from threading import Thread
 from queue import Queue
-
-import ana
+import traceback
 
 from .jobs import CFGGenerationJob
 from .object_container import ObjectContainer
+from .sync_ctrl import SyncControl
 from ..logic import GlobalInfo
 from ..logic.threads import gui_thread_schedule_async
 
 
 class Instance:
     def __init__(self, project=None):
+        # delayed import
+        from ..ui.views.interaction_view import PlainTextProtocol
+
         self.workspace = None
 
         self.jobs = []
         self._jobs_queue = Queue()
         self.simgrs = ObjectContainer([], name='Global simulation managers list')
         self.states = ObjectContainer([], name='Global states list')
+        self.patches = ObjectContainer(None, name='Global patches update notifier')
         self._project_container = ObjectContainer(project, "the current angr project")
-        self.cfg_container = ObjectContainer(project, "the current CFG")
+        self._project_container.am_subscribe(self.initialize)
+        self.cfg_container = ObjectContainer(None, "the current CFG")
+        self.cfb_container = ObjectContainer(None, "the current CFBlanket")
+        self.interactions = ObjectContainer([], name='Saved program interactions')
+        self.interaction_protocols = ObjectContainer([PlainTextProtocol], name='Available interaction protocols')
+        self.sync = SyncControl(self)
+
+        self.cfg_args = None
+
 
         self._start_worker()
 
-        self._cfg = None
-        self._cfb = None
+        self._disassembly = {}
 
         self.database_path = None
 
@@ -64,11 +75,12 @@ class Instance:
 
     @property
     def cfb(self):
-        return self._cfb
+        return self.cfb_container.am_obj
 
     @cfb.setter
     def cfb(self, v):
-        self._cfb = v
+        self.cfb_container.am_obj = v
+        self.cfb_container.am_event()
 
     #
     # Public methods
@@ -81,10 +93,12 @@ class Instance:
         # self.cfg_container.am_event()
 
     def async_set_cfb(self, cfb):
-        self._cfb = cfb
+        self.cfb_container.am_obj = cfb
+        # should not trigger a signal
 
-    def set_project(self, project):
-        self.project = project
+    def set_project(self, project, cfg_args=None):
+        self._project_container.am_obj = project
+        self._project_container.am_event(cfg_args=cfg_args)
 
     def set_image(self, image):
         self.img_name = image
@@ -92,30 +106,26 @@ class Instance:
     def initialize(self, cfg_args=None):
         if cfg_args is None:
             cfg_args = {}
-        cfg_job = CFGGenerationJob(
-                on_finish=self.workspace.on_cfg_generated,
-                **cfg_args
-             )
-        self.add_job(cfg_job)
+        # save cfg_args
+        self.cfg_args = cfg_args
 
+        # generate CFG
+        cfg_job = self.generate_cfg()
+
+        # start daemon
         self._start_daemon_thread(self._refresh_cfg, 'Progressive Refreshing CFG', args=(cfg_job,))
+
+    def generate_cfg(self):
+        cfg_job = CFGGenerationJob(
+            on_finish=self.workspace.on_cfg_generated,
+            **self.cfg_args
+        )
+        self.add_job(cfg_job)
+        return cfg_job
 
     def add_job(self, job):
         self.jobs.append(job)
         self._jobs_queue.put(job)
-
-    def save(self, loc):
-        with open(loc, 'wb') as f:
-            pickled = pickle.dumps(self)
-            store = ana.get_dl()._state_store
-            pickle.dump({'store': store, 'pickled': pickled}, f)
-
-    @staticmethod
-    def from_file(loc):
-        with open(loc, 'rb') as f:
-            saved = pickle.load(f)
-            ana.get_dl()._state_store = saved['store']
-            return pickle.loads(saved['pickled'])
 
     #
     # Private methods
@@ -127,7 +137,7 @@ class Instance:
         t.start()
 
     def _start_worker(self):
-        self._start_daemon_thread(self._worker, 'angr Management Worker Thread')
+        self._start_daemon_thread(self._worker, 'angr-management Worker Thread')
 
     def _worker(self):
         while True:
@@ -137,10 +147,13 @@ class Instance:
             job = self._jobs_queue.get()
             gui_thread_schedule_async(self._set_status, args=("Working...",))
 
-            result = job.run(self)
-            gui_thread_schedule_async(job.finish, args=(self, result))
-
-            self.jobs.remove(job)
+            try:
+                result = job.run(self)
+            except:
+                self.workspace.log('Exception while running job "%s":\n' % job.name)
+                self.workspace.log(traceback.format_exc())
+            else:
+                gui_thread_schedule_async(job.finish, args=(self, result))
 
     def _set_status(self, status_text):
         GlobalInfo.main_window.status = status_text
@@ -148,7 +161,7 @@ class Instance:
     def _refresh_cfg(self, cfg_job):
         time.sleep(1.0)
         while True:
-            if self._cfg is not None:
+            if self.cfg is not None:
                 if self.workspace is not None:
                     gui_thread_schedule_async(lambda: self.workspace.reload())
 

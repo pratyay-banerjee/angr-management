@@ -32,13 +32,16 @@ data_constructors = {
 ENTRIES = [
     CE('ui_default_font', QFont, None),
     CE('disasm_font', QFont, None),
+    CE('disasm_font_metrics', QFontMetricsF, None),
     CE('disasm_font_height', int, None),
     CE('disasm_font_width', int, None),
     CE('disasm_font_ascent', int, None),
     CE('symexec_font', QFont, None),
+    CE('symexec_font_metrics', QFontMetricsF, None),
     CE('symexec_font_height', int, None),
     CE('symexec_font_width', int, None),
     CE('symexec_font_ascent', int, None),
+    CE('code_font_metrics', QFontMetricsF, None),
     CE('code_font', QFont, None),
     CE('code_font_height', int, None),
     CE('code_font_width', int, None),
@@ -49,6 +52,11 @@ ENTRIES = [
     CE('disasm_view_antitarget_addr_color', QColor, QColor(0xff, 0, 0)),
     CE('disasm_view_node_background_color', QColor, QColor(0xfa, 0xfa, 0xfa)),
     CE('disasm_view_node_border_color', QColor, QColor(0xf0, 0xf0, 0xf0)),
+    # feature map
+    CE('feature_map_color_regular_function', QColor, QColor(0, 0xa0, 0xe8)),
+    CE('feature_map_color_unknown', QColor, QColor(0xa, 0xa, 0xa)),
+    CE('feature_map_color_delimiter', QColor, QColor(0, 0, 0)),
+    CE('feature_map_color_data', QColor, QColor(0xc0, 0xc0, 0xc0)),
 ]
 
 
@@ -70,22 +78,22 @@ class ConfigurationManager:
         self.ui_default_font = QGuiApplication.font()
 
         self.disasm_font = QFont("DejaVu Sans Mono", 10)
-        font_metrics = QFontMetricsF(self.disasm_font)
-        self.disasm_font_height = font_metrics.height()
-        self.disasm_font_width = font_metrics.width('A')
-        self.disasm_font_ascent = font_metrics.ascent()
+        self.disasm_font_metrics = QFontMetricsF(self.disasm_font)
+        self.disasm_font_height = self.disasm_font_metrics.height()
+        self.disasm_font_width = self.disasm_font_metrics.width('A')
+        self.disasm_font_ascent = self.disasm_font_metrics.ascent()
 
         self.symexec_font = QFont("DejaVu Sans Mono", 10)
-        font_metrics = QFontMetricsF(self.symexec_font)
-        self.symexec_font_height = font_metrics.height()
-        self.symexec_font_width = font_metrics.width('A')
-        self.symexec_font_ascent = font_metrics.ascent()
+        self.symexec_font_metrics = QFontMetricsF(self.symexec_font)
+        self.symexec_font_height = self.symexec_font_metrics.height()
+        self.symexec_font_width = self.symexec_font_metrics.width('A')
+        self.symexec_font_ascent = self.symexec_font_metrics.ascent()
 
         self.code_font = QFont("Source Code Pro", 10)
-        font_metrics = QFontMetricsF(self.code_font)
-        self.code_font_height = font_metrics.height()
-        self.code_font_width = font_metrics.width('A')
-        self.code_font_ascent = font_metrics.ascent()
+        self.code_font_metrics = QFontMetricsF(self.code_font)
+        self.code_font_height = self.code_font_metrics.height()
+        self.code_font_width = self.code_font_metrics.width('A')
+        self.code_font_ascent = self.code_font_metrics.ascent()
 
     def __getattr__(self, item):
 

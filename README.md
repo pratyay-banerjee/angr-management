@@ -29,18 +29,7 @@ Please consider having a development install if you plan to use latest features/
 
 ### Development Install
 
-- Check out the Git repo:
-
-```
-git clone git@github.com:angr/angr-management.git
-```
-
-- Install angr Management
-
-```
-cd angr-management
-pip install -e .
-```
+See [angr-dev](https://github.com/angr/angr-dev) for how to set up a development enviroment for the angr suite.
 
 ## Usage
 
